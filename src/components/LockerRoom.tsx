@@ -9,6 +9,7 @@ export interface PlayerProfile {
   jacket: string;
   pants: string;
   shoes: string;
+  rpm_url?: string;
 }
 
 interface LockerRoomProps {

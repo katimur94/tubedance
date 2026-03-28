@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { SyncBar } from './SyncBar';
 import { SequenceInput } from './SequenceInput';
 import { Avatar3D } from './Avatar3D';
+import { PlayerAvatar } from './PlayerAvatar';
 import { PlayerProfile } from './LockerRoom';
 
 interface PlaylistSong { video_id: string; title: string; bpm: number }
@@ -226,8 +227,11 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
                     
                     {p.profile && (
                       <div className="w-14 h-14 rounded-full bg-black/50 border-2 border-gray-700 relative overflow-hidden flex items-center justify-center shrink-0">
-                        {/* Minified 3D View */}
-                        <Avatar3D jacket={p.profile.jacket} pants={p.profile.pants} shoes={p.profile.shoes} danceState={p.danceState || 'idle'} intensity={p.intensity || 1} bpm={currentSong ? (currentSong.bpm || 120) : 120} />
+                        {p.profile.rpm_url ? (
+                           <div className="scale-[0.5] origin-top"><PlayerAvatar modelUrl={p.profile.rpm_url} danceState={p.danceState || 'idle'} intensity={p.intensity || 1} bpm={currentSong?.bpm || 120} /></div>
+                        ) : (
+                           <Avatar3D jacket={p.profile.jacket} pants={p.profile.pants} shoes={p.profile.shoes} danceState={p.danceState || 'idle'} intensity={p.intensity || 1} bpm={currentSong ? (currentSong.bpm || 120) : 120} />
+                        )}
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
@@ -250,14 +254,23 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
           
           {/* Main 3D Avatar Showcase */}
           <div className="mb-4 pointer-events-auto relative w-full h-[35vh] flex justify-center items-end">
-            <Avatar3D 
-              jacket={profile.jacket} 
-              pants={profile.pants} 
-              shoes={profile.shoes} 
-              danceState={avatarDance} 
-              intensity={intensity}
-              bpm={currentSong.bpm || 120}
-            />
+             {profile.rpm_url ? (
+                <PlayerAvatar 
+                   modelUrl={profile.rpm_url}
+                   danceState={avatarDance} 
+                   intensity={intensity}
+                   bpm={currentSong.bpm || 120}
+                />
+             ) : (
+                <Avatar3D 
+                  jacket={profile.jacket} 
+                  pants={profile.pants} 
+                  shoes={profile.shoes} 
+                  danceState={avatarDance} 
+                  intensity={intensity}
+                  bpm={currentSong.bpm || 120}
+                />
+             )}
           </div>
 
           <div className="mb-12 pointer-events-auto">
