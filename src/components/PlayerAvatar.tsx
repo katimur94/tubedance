@@ -53,13 +53,7 @@ interface PlayerAvatarProps {
 }
 
 export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ modelUrl, danceState, intensity, bpm }) => {
-  if (!modelUrl) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900/80 text-cyan-400 rounded-2xl border border-gray-700 shadow-xl">
-        <p className="font-bold tracking-widest uppercase text-xs">Kein Avatar ausgewählt</p>
-      </div>
-    );
-  }
+  const activeUrl = modelUrl || '/models/placeholder.glb';
 
   return (
     <div className="w-full h-full relative" style={{ minHeight: '300px' }}>
@@ -74,7 +68,7 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ modelUrl, danceState
           <Environment preset="city" /> {/* Gibt dem Modell schöne Reflexionen */}
           
           {/* Das Modell laden */}
-          <Model url={modelUrl} danceState={danceState} intensity={intensity} bpm={bpm} />
+          <Model url={activeUrl} danceState={danceState} intensity={intensity} bpm={bpm} />
 
           {/* Ein kleiner weicher Schatten unter dem Charakter */}
           <ContactShadows position={[0, -1, 0]} opacity={0.6} scale={10} blur={2} far={4} />
@@ -88,6 +82,14 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ modelUrl, danceState
           />
         </Suspense>
       </Canvas>
+      
+      {!modelUrl && (
+         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
+            <span className="bg-gray-900 border border-cyan-500 text-cyan-400 px-3 py-1 text-xs font-mono rounded-full uppercase tracking-widest">
+               Local Placeholder
+            </span>
+         </div>
+      )}
     </div>
   );
 };

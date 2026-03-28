@@ -12,7 +12,7 @@ export const AvatarCreator: React.FC<AvatarCreatorProps> = ({ onAvatarExported, 
     clearCache: true,
     bodyType: 'fullbody', // Wir wollen den ganzen Körper für Tanz-Animationen
     quickStart: false,
-    language: 'de',
+    language: 'en', // Sicherer Fallback (manche Subdomains unterstützen '/de/avatar' nicht korrekt im Iframe)
   };
 
   return (

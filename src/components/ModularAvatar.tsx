@@ -12,7 +12,7 @@ interface ModularAvatarProps {
 
 function ModularAvatarModel({ currentShirt, currentPants, currentShoes, danceState = 'idle' }: ModularAvatarProps) {
   const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF('/models/modular_avatar.glb');
+  const { scene, animations } = useGLTF('/models/placeholder.glb');
   const { actions, names } = useAnimations(animations, group);
 
   useEffect(() => {
@@ -101,8 +101,8 @@ export function ModularAvatar(props: ModularAvatarProps) {
 
       {/* Hilfstext für den User, falls Modell fehlt */}
       <div className="absolute bottom-4 w-full text-center pointer-events-none">
-        <p className="text-red-500 font-mono text-xs bg-black/80 inline-block px-4 py-1 rounded">
-          [Das 3D-Modell /models/modular_avatar.glb muss bereitgestellt werden!]
+        <p className="text-cyan-400 font-mono text-xs bg-gray-900 border border-cyan-500 inline-block px-4 py-1 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+          [Lade lokales Fallback-Modell: /models/placeholder.glb]
         </p>
       </div>
     </div>
