@@ -1,21 +1,43 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Users, Shield, ArrowLeft, Trophy } from 'lucide-react';
+import { Play, Users, Shield, ArrowLeft, Trophy, Shirt } from 'lucide-react';
 import Game from './components/Game';
 import { PlaylistManager } from './components/PlaylistManager';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
+import { LockerRoom, PlayerProfile } from './components/LockerRoom';
 import { supabase } from './lib/supabase';
 
+// Generate consistent ID for session/localStorage
+const getDeviceId = () => {
+  let id = localStorage.getItem('tubedance_device_id');
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem('tubedance_device_id', id); }
+  return id;
+}
+
 const ANALYTICS = {
-  id: crypto.randomUUID(),
+  id: getDeviceId(),
   name: 'Dancer_' + Math.floor(Math.random() * 9999)
 };
 
+const DEFAULT_PROFILE: PlayerProfile = {
+  level: 1, exp: 0,
+  jacket: 'bg-gray-500', pants: 'bg-gray-500', shoes: 'bg-gray-500'
+};
+
 export default function App() {
-  const [view, setView] = useState<'menu' | 'playlist_single' | 'lobby' | 'game'>('menu');
+  const [view, setView] = useState<'menu' | 'playlist_single' | 'lobby' | 'locker' | 'game'>('menu');
   const [playlist, setPlaylist] = useState<any[]>([]);
   const [roomCode, setRoomCode] = useState<string>('');
   const [mode, setMode] = useState<'audition' | 'solo'>('audition');
+
+  const [profile, setProfile] = useState<PlayerProfile>(() => {
+    const saved = localStorage.getItem('tubedance_profile');
+    return saved ? JSON.parse(saved) : DEFAULT_PROFILE;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('tubedance_profile', JSON.stringify(profile));
+  }, [profile]);
 
   const handleSelectPlaylistSingle = (songs: any[]) => {
     if (songs && songs.length > 0) {
@@ -35,9 +57,26 @@ export default function App() {
       setPlaylist(data || []);
     } else {
       // Mock Fallback
-      setPlaylist([{ video_id: 'YEy6i9p2y1A', title: 'Default Test Song', bpm: 120 }]);
+      setPlaylist([{ video_id: 'K4DyBUG242c', title: 'Default Test Song', bpm: 120 }]);
     }
     setView('game');
+  };
+
+  const handleGameEnd = (earnedExp: number) => {
+    setProfile(prev => {
+      let newExp = prev.exp + earnedExp;
+      let newLevel = prev.level;
+      let expNeeded = newLevel * 1000;
+      
+      while (newExp >= expNeeded) {
+        newExp -= expNeeded;
+        newLevel++;
+        expNeeded = newLevel * 1000;
+      }
+      
+      return { ...prev, level: newLevel, exp: newExp };
+    });
+    setView('menu');
   };
 
   return (
@@ -70,21 +109,21 @@ export default function App() {
                 TUBEDANCE
               </h1>
               <p className="text-gray-400 text-xl tracking-[0.3em] font-semibold mt-4">
-                AUDITION UPDATE
+                LEVEL {profile.level} DANCER
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
               <motion.div 
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setView('playlist_single')}
                 className="bg-gray-900/60 backdrop-blur-md border border-gray-800 hover:border-cyan-500/50 rounded-[32px] p-8 cursor-pointer group transition-all"
               >
-                <div className="bg-gradient-to-br from-cyan-500/20 to-blue-500/20 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 border border-cyan-500/30 group-hover:scale-110 transition-transform">
-                  <Play className="text-cyan-400 w-10 h-10" fill="currentColor" />
+                <div className="bg-gradient-to-br from-cyan-500/20 to-blue-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border border-cyan-500/30 group-hover:scale-110 transition-transform">
+                  <Play className="text-cyan-400 w-8 h-8" fill="currentColor" />
                 </div>
-                <h3 className="text-3xl font-black mb-2 text-white group-hover:text-cyan-400 transition-colors">Offline Modus</h3>
-                <p className="text-gray-400 leading-relaxed font-medium">Spiel alleine deine YouTube-Playlists. Rhythmus und Timing sind entscheidend.</p>
+                <h3 className="text-2xl font-black mb-2 text-white group-hover:text-cyan-400 transition-colors">Offline Modus</h3>
+                <p className="text-gray-400 leading-relaxed font-medium text-sm">Spiel alleine deine Playlists & sammle massig EXP für neue Kleidung.</p>
               </motion.div>
 
               <motion.div 
@@ -92,11 +131,23 @@ export default function App() {
                 onClick={() => setView('lobby')}
                 className="bg-gray-900/60 backdrop-blur-md border border-gray-800 hover:border-purple-500/50 rounded-[32px] p-8 cursor-pointer group transition-all"
               >
-                <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 border border-purple-500/30 group-hover:scale-110 transition-transform">
-                  <Users className="text-purple-400 w-10 h-10" fill="currentColor" />
+                <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border border-purple-500/30 group-hover:scale-110 transition-transform">
+                  <Users className="text-purple-400 w-8 h-8" fill="currentColor" />
                 </div>
-                <h3 className="text-3xl font-black mb-2 text-white group-hover:text-purple-400 transition-colors">Multiplayer</h3>
-                <p className="text-gray-400 leading-relaxed font-medium">Tritt Lobbys bei, tanze in Echtzeit gegen andere und steige im Live-Leaderboard auf.</p>
+                <h3 className="text-2xl font-black mb-2 text-white group-hover:text-purple-400 transition-colors">Multiplayer</h3>
+                <p className="text-gray-400 leading-relaxed font-medium text-sm">Tritt Lobbys bei und zeige allen deinen Avatar im Ranking.</p>
+              </motion.div>
+
+              <motion.div 
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={() => setView('locker')}
+                className="bg-gray-900/60 backdrop-blur-md border border-gray-800 hover:border-yellow-500/50 rounded-[32px] p-8 cursor-pointer group transition-all"
+              >
+                <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border border-yellow-500/30 group-hover:scale-110 transition-transform">
+                  <Shirt className="text-yellow-400 w-8 h-8" fill="currentColor" />
+                </div>
+                <h3 className="text-2xl font-black mb-2 text-white group-hover:text-yellow-400 transition-colors">Locker Room</h3>
+                <p className="text-gray-400 leading-relaxed font-medium text-sm">Passe deinen 2D-Avatar an und checke deinen Level-Fortschritt.</p>
               </motion.div>
             </div>
           </motion.div>
@@ -117,6 +168,12 @@ export default function App() {
             />
           </motion.div>
         )}
+
+        {view === 'locker' && (
+          <motion.div key="locker" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="w-full z-10">
+            <LockerRoom profile={profile} onSave={setProfile} onBack={() => setView('menu')} />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {view === 'game' && (
@@ -127,8 +184,9 @@ export default function App() {
             roomCode={roomCode}
             userId={ANALYTICS.id}
             username={ANALYTICS.name}
+            profile={profile}
             onBack={() => setView('menu')}
-            onRestart={() => setView('menu')}
+            onGameEnd={handleGameEnd}
           />
         </div>
       )}
