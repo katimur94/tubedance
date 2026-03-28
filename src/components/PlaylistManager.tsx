@@ -24,36 +24,36 @@ const LOCAL_PRESETS: Playlist[] = [
   {
     id: 'local_sehr_leicht', title: '🟢 Sehr Leicht', is_preset: true, created_by: null,
     songs: [
-      { id: 'p1', video_id: 'kPa7bsKwL-c', title: 'Relaxing Lofi', bpm: 80, position: 1 },
-      { id: 'p2', video_id: '5qap5aO4i9A', title: 'Lofi Girl Live', bpm: 85, position: 2 }
+      { id: 'p1', video_id: 'K4DyBUG242c', title: 'LFZ - Popsicle', bpm: 120, position: 1 },
+      { id: 'p2', video_id: 'TW9d8vYrVFQ', title: 'Elektronomia - Sky High', bpm: 128, position: 2 }
     ]
   },
   {
     id: 'local_leicht', title: '🔵 Leicht', is_preset: true, created_by: null,
     songs: [
-      { id: 'p3', video_id: 'fJ9rUzIMcZQ', title: 'Queen - Bohemian Rhapsody', bpm: 100, position: 1 },
-      { id: 'p4', video_id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito', bpm: 105, position: 2 }
+      { id: 'p3', video_id: 'K4CyUe23A-c', title: 'Cartoon - On & On', bpm: 145, position: 1 },
+      { id: 'p4', video_id: 'tX5o2uLw47o', title: 'Unknown Brain - Superhero', bpm: 150, position: 2 }
     ]
   },
   {
     id: 'local_mittel', title: '🟡 Mittel', is_preset: true, created_by: null,
     songs: [
-      { id: 'p5', video_id: 'OPf0YbXqDm0', title: 'Mark Ronson - Uptown Funk', bpm: 115, position: 1 },
-      { id: 'p6', video_id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE', bpm: 132, position: 2 }
+      { id: 'p5', video_id: '3nQNiWdeH2Q', title: 'Janji - Heroes Tonight', bpm: 128, position: 1 },
+      { id: 'p6', video_id: '6FNHe3kf8_s', title: 'Different Heaven - Nekozilla', bpm: 128, position: 2 }
     ]
   },
   {
     id: 'local_schwer', title: '🟠 Schwer', is_preset: true, created_by: null,
     songs: [
-      { id: 'p7', video_id: 'VHoT4N43jK8', title: 'Skrillex - Bangarang', bpm: 145, position: 1 },
-      { id: 'p8', video_id: 'CSvFpBOe8eY', title: 'System Of A Down - Chop Suey!', bpm: 150, position: 2 }
+      { id: 'p7', video_id: '4ZvnQ_2BfV0', title: 'Lensko - Let\'s Go!', bpm: 128, position: 1 },
+      { id: 'p8', video_id: 'AOeY-nDp7hI', title: 'Alan Walker - Fade', bpm: 90, position: 2 }
     ]
   },
   {
     id: 'local_extrem', title: '🔴 Extrem', is_preset: true, created_by: null,
     songs: [
-      { id: 'p9', video_id: 'YJVmu6yttsq', title: 'Darude - Sandstorm', bpm: 165, position: 1 },
-      { id: 'p10', video_id: 'WSeNSzJ2-Jw', title: 'Camellia - Ghost', bpm: 200, position: 2 }
+      { id: 'p9', video_id: 'IIrCDAV3EgI', title: 'Tobu - Hope', bpm: 128, position: 1 },
+      { id: 'p10', video_id: 'yJg-Y5byMMw', title: 'Aero Chord - Surface', bpm: 140, position: 2 }
     ]
   }
 ];

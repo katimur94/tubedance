@@ -4,9 +4,10 @@ import { motion, useAnimation } from 'motion/react';
 interface SyncBarProps {
   bpm: number;
   onHit: (result: string) => void;
+  locked?: boolean;
 }
 
-export function SyncBar({ bpm, onHit }: SyncBarProps) {
+export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const startTimeRef = useRef(performance.now());
   const requestRef = useRef<number>(0);
@@ -34,12 +35,18 @@ export function SyncBar({ bpm, onHit }: SyncBarProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
+        if (locked) {
+           setFeedback('PFEILE!');
+           setTimeout(() => setFeedback(null), 800);
+           onHit('LOCKED');
+           return;
+        }
         evaluateHit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [bpm]);
+  }, [bpm, locked]);
 
   const evaluateHit = () => {
     const pos = positionRef.current;
