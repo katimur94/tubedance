@@ -1,0 +1,5 @@
+{
+  "name": "TubeDance",
+  "description": "Ein Web-basiertes Rhythmus- & Tanzspiel mit YouTube-Integration.",
+  "requestFramePermissions": []
+}
