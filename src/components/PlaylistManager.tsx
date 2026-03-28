@@ -22,38 +22,78 @@ interface Playlist {
 
 const LOCAL_PRESETS: Playlist[] = [
   {
-    id: 'local_sehr_leicht', title: '🟢 Sehr Leicht (~80-95 BPM)', is_preset: true, created_by: null,
+    id: 'local_sehr_leicht', title: '🟢 Sehr Leicht (60-80 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p1', video_id: 'AOeY-nDp7hI', title: 'Alan Walker - Fade', bpm: 90, position: 1 },
-      { id: 'p2', video_id: 'p7ZsBPK656s', title: 'Syn Cole - Feel Good (Chill Mix)', bpm: 85, position: 2 }
+      { id: '1', video_id: '2Vv-BfVoq4g', title: 'Ed Sheeran - Perfect', bpm: 63, position: 1 },
+      { id: '2', video_id: '450p7goxZqg', title: 'John Legend - All of Me', bpm: 63, position: 2 },
+      { id: '3', video_id: 'tfBVp0Zi2iE', title: 'Adele - Someone Like You', bpm: 67, position: 3 },
+      { id: '4', video_id: '1fueZCTYkpA', title: 'Chill Lofi Mix 1', bpm: 70, position: 4 },
+      { id: '5', video_id: 'J91ti_MpdHA', title: 'NCS Chill Relax', bpm: 70, position: 5 },
+      { id: '6', video_id: 'RBumgq5yVrA', title: 'Passenger - Let Her Go', bpm: 75, position: 6 },
+      { id: '7', video_id: 'jGflUbPQfW8', title: 'Cartoon - I Remember U (Chill)', bpm: 75, position: 7 },
+      { id: '8', video_id: 'lp-EO5I60KA', title: 'Ed Sheeran - Thinking Out Loud', bpm: 79, position: 8 },
+      { id: '9', video_id: 'p7ZsBPK656s', title: 'Syn Cole - Feel Good (Chill Mix)', bpm: 80, position: 9 },
+      { id: '10', video_id: 'Z8N_2f2R1-w', title: 'Lofi Mix 2', bpm: 80, position: 10 }
     ]
   },
   {
-    id: 'local_leicht', title: '🔵 Leicht (~100-115 BPM)', is_preset: true, created_by: null,
+    id: 'local_leicht', title: '🔵 Leicht (85-115 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p3', video_id: 'J2X5mJ3HDYE', title: 'NCS Pop Mix', bpm: 105, position: 1 },
-      { id: 'p4', video_id: '8vG7F0h2wFM', title: 'Cadmium - Melody', bpm: 110, position: 2 }
+      { id: '11', video_id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito', bpm: 89, position: 1 },
+      { id: '12', video_id: 'AOeY-nDp7hI', title: 'Alan Walker - Fade', bpm: 90, position: 2 },
+      { id: '13', video_id: 'CGyEd0aKWZE', title: 'Ellie Goulding - Love Me Like You Do', bpm: 95, position: 3 },
+      { id: '14', video_id: 'JGwWNGJdvx8', title: 'Ed Sheeran - Shape of You', bpm: 96, position: 4 },
+      { id: '15', video_id: 'YQEvdNzX5qU', title: 'Major Lazer - Lean On', bpm: 98, position: 5 },
+      { id: '16', video_id: 'fJ9rUzIMcZQ', title: 'Queen - Bohemian Rhapsody', bpm: 100, position: 6 },
+      { id: '17', video_id: 'J2X5mJ3HDYE', title: 'NCS Pop Mix', bpm: 105, position: 7 },
+      { id: '18', video_id: 'hLQl3WQQoQ0', title: 'Adele - Rolling in the deep', bpm: 105, position: 8 },
+      { id: '19', video_id: '8vG7F0h2wFM', title: 'Cadmium - Melody', bpm: 110, position: 9 },
+      { id: '20', video_id: 'OPf0YbXqDm0', title: 'Mark Ronson - Uptown Funk', bpm: 115, position: 10 }
     ]
   },
   {
-    id: 'local_mittel', title: '🟡 Mittel (~120-135 BPM)', is_preset: true, created_by: null,
+    id: 'local_mittel', title: '🟡 Mittel (120-135 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p5', video_id: 'TW9d8vYrVFQ', title: 'Elektronomia - Sky High', bpm: 128, position: 1 },
-      { id: 'p6', video_id: '6FNHe3kf8_s', title: 'Different Heaven - Nekozilla', bpm: 128, position: 2 }
+      { id: '21', video_id: 'ALZHF5UqnU4', title: 'Marshmello - Alone', bpm: 120, position: 1 },
+      { id: '22', video_id: 'nfs8NYg7yQM', title: 'Pharrell Williams - Happy', bpm: 120, position: 2 },
+      { id: '23', video_id: 'hT_nvWreIhg', title: 'OneRepublic - Counting Stars', bpm: 122, position: 3 },
+      { id: '24', video_id: 'TW9d8vYrVFQ', title: 'Elektronomia - Sky High', bpm: 128, position: 4 },
+      { id: '25', video_id: '6FNHe3kf8_s', title: 'Different Heaven - Nekozilla', bpm: 128, position: 5 },
+      { id: '26', video_id: '3nQNiWdeH2Q', title: 'Janji - Heroes Tonight', bpm: 128, position: 6 },
+      { id: '27', video_id: '4ZvnQ_2BfV0', title: 'Lensko - Let\'s Go!', bpm: 128, position: 7 },
+      { id: '28', video_id: 'IIrCDAV3EgI', title: 'Tobu - Hope', bpm: 128, position: 8 },
+      { id: '29', video_id: 'bM7SZ5SBzyY', title: 'Alan Walker - The Spectre', bpm: 128, position: 9 },
+      { id: '30', video_id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE', bpm: 132, position: 10 }
     ]
   },
   {
-    id: 'local_schwer', title: '🟠 Schwer (~140-155 BPM)', is_preset: true, created_by: null,
+    id: 'local_schwer', title: '🟠 Schwer (140-155 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p7', video_id: 'K4CyUe23A-c', title: 'Cartoon - On & On', bpm: 144, position: 1 },
-      { id: 'p8', video_id: 'tX5o2uLw47o', title: 'Unknown Brain - Superhero', bpm: 150, position: 2 }
+      { id: '31', video_id: 'K4CyUe23A-c', title: 'Cartoon - On & On', bpm: 144, position: 1 },
+      { id: '32', video_id: 'B2p-jVKpzK8', title: 'TheFatRat - Monody', bpm: 145, position: 2 },
+      { id: '33', video_id: 'VHoT4N43jK8', title: 'Skrillex - Bangarang', bpm: 145, position: 3 },
+      { id: '34', video_id: 'y6120QOlsfU', title: 'Darude - Sandstorm', bpm: 146, position: 4 },
+      { id: '35', video_id: 'tX5o2uLw47o', title: 'Unknown Brain - Superhero', bpm: 150, position: 5 },
+      { id: '36', video_id: 'CSvFpBOe8eY', title: 'System Of A Down - Chop Suey!', bpm: 150, position: 6 },
+      { id: '37', video_id: 'zDo0H8Fm5c0', title: 'NCS Hard Trap', bpm: 150, position: 7 },
+      { id: '38', video_id: 'Oq6IoKz7uTQ', title: 'Nightcore Mix 1', bpm: 150, position: 8 },
+      { id: '39', video_id: 'Wb_f6EAdTWM', title: 'Droptek - Boundaries', bpm: 155, position: 9 },
+      { id: '40', video_id: 'nfWlot6h_JM', title: 'Taylor Swift - Shake It Off (Speed)', bpm: 160, position: 10 }
     ]
   },
   {
     id: 'local_extrem', title: '🔴 Extrem (160+ BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p9', video_id: 'uzjNgWav3nk', title: 'NCS Hardstyle / DNB', bpm: 175, position: 1 },
-      { id: 'p10', video_id: 'yJg-Y5byMMw', title: 'Aero Chord - Surface', bpm: 190, position: 2 }
+      { id: '41', video_id: 'c-XpOMmQ24A', title: 'Eminem - Rap God', bpm: 164, position: 1 },
+      { id: '42', video_id: 'wU2O7yB7Nuk', title: 'Nightcore - Angel With A Shotgun', bpm: 165, position: 2 },
+      { id: '43', video_id: 'kXYiU_JCYtU', title: 'Linkin Park - Numb (Rock)', bpm: 170, position: 3 },
+      { id: '44', video_id: 'uzjNgWav3nk', title: 'NCS Hardstyle / DNB', bpm: 175, position: 4 },
+      { id: '45', video_id: 'aE2GCa-_nyU', title: 'Muzzy - Endgame', bpm: 175, position: 5 },
+      { id: '46', video_id: 'yJg-Y5byMMw', title: 'Aero Chord - Surface', bpm: 190, position: 6 },
+      { id: '47', video_id: '1wYNFfgrXTI', title: 'Slipknot - Duality', bpm: 190, position: 7 },
+      { id: '48', video_id: 'WSeNSzJ2-Jw', title: 'Camellia - Ghost', bpm: 200, position: 8 },
+      { id: '49', video_id: 'YVKcmX_x-yA', title: 'DragonForce - Through The Fire And Flames', bpm: 200, position: 9 },
+      { id: '50', video_id: 'Jwpj3I37h1c', title: '200 BPM Hardstyle Mix', bpm: 200, position: 10 }
     ]
   }
 ];
@@ -250,17 +290,26 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (songs
                 <button
                   onClick={() => onSelectPlaylist(songs)}
                   disabled={songs.length === 0}
-                  className="flex items-center gap-2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  <Play size={18} fill="currentColor" /> Spielen
+                  <ListVideo size={16} fill="currentColor" /> Alle Spielen
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                 {songs.map((song, i) => (
-                  <div key={song.id} className="flex items-center gap-4 p-4 bg-gray-900/80 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-colors">
+                  <div key={song.id} className="flex items-center gap-4 p-4 bg-gray-900/80 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-colors group">
                     <span className="text-gray-500 font-black text-sm w-4">{i + 1}.</span>
                     <span className="flex-1 truncate font-medium text-gray-200">{song.title}</span>
                     <span className="text-cyan-400/80 text-xs font-mono font-bold bg-cyan-900/30 px-2 py-1 rounded">{song.bpm || 120} BPM</span>
+                    
+                    {/* Individual Song Play Button */}
+                    <button 
+                      onClick={() => onSelectPlaylist([song])}
+                      className="opacity-0 group-hover:opacity-100 p-2 bg-cyan-500 hover:bg-cyan-400 text-black rounded-full shadow-lg transition-all"
+                      title="Nur diesen Song spielen"
+                    >
+                      <Play fill="currentColor" size={14} />
+                    </button>
                   </div>
                 ))}
                 {songs.length === 0 && (
