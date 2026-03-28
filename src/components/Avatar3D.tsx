@@ -4,22 +4,82 @@ import { OrbitControls, Environment, ContactShadows, Float } from '@react-three/
 import * as THREE from 'three';
 
 interface Avatar3DProps {
-  jacket: string; // E.g. "#ff0000" or simple hex colors
-  pants: string;
+  jacket: string; // E.g. "leather_black", "camo_green"
+  pants: string; // E.g. "denim_blue", "tracksuit_red"
   shoes: string;
   danceState: 'idle' | 'dancing' | 'miss';
-  intensity: number; // 1 (low) to 3 (extreme) based on hit or combo
+  intensity: number;
   bpm?: number;
 }
 
-// Convert Tailwind string to Hex just for the 3D model
-const colorMap: Record<string, string> = {
-  'bg-gray-500': '#6b7280', 'bg-red-500': '#ef4444', 
-  'bg-blue-500': '#3b82f6', 'bg-green-500': '#22c55e',
-  'bg-pink-500': '#ec4899', 'bg-cyan-400': '#22d3ee',
-  'bg-yellow-400': '#facc15', 'bg-gray-900': '#111827',
-  'bg-gradient-to-r from-purple-500 via-pink-500 to-red-500': '#a855f7' // simplified
-};
+// --- Procedural Textures ---
+function createTexture(type: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  
+  if (type === 'denim_blue') {
+    ctx.fillStyle = '#1e3a8a'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    for(let i=0; i<3000; i++) ctx.fillRect(Math.random()*256, Math.random()*256, 1, 3);
+  } else if (type === 'denim_black') {
+    ctx.fillStyle = '#1f2937'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    for(let i=0; i<3000; i++) ctx.fillRect(Math.random()*256, Math.random()*256, 1, 3);
+  } else if (type === 'tracksuit_red') {
+    ctx.fillStyle = '#dc2626'; ctx.fillRect(0,0,256,256);
+    // White stripes
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(230, 0, 10, 256);
+  } else if (type === 'tracksuit_black') {
+    ctx.fillStyle = '#000000'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(230, 0, 10, 256);
+  } else if (type === 'leather_black') {
+    ctx.fillStyle = '#111827'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    for(let i=0; i<1000; i++) {
+       ctx.beginPath();
+       ctx.arc(Math.random()*256, Math.random()*256, Math.random()*3, 0, Math.PI*2);
+       ctx.fill();
+    }
+  } else if (type === 'camo_green') {
+    ctx.fillStyle = '#4d7c0f'; ctx.fillRect(0,0,256,256);
+    const colors = ['#3f6212', '#14532d', '#1c1917'];
+    for(let i=0; i<100; i++) {
+       ctx.fillStyle = colors[Math.floor(Math.random()*colors.length)];
+       ctx.beginPath();
+       ctx.ellipse(Math.random()*256, Math.random()*256, 15+Math.random()*30, 15+Math.random()*20, Math.random()*Math.PI, 0, Math.PI*2);
+       ctx.fill();
+    }
+  } else if (type === 'plaid_red') {
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    for(let i=0; i<8; i++) { ctx.fillRect(i*32, 0, 16, 256); ctx.fillRect(0, i*32, 256, 16); }
+  } else if (type === 'swag_gold') {
+    ctx.fillStyle = '#fbbf24'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#f59e0b';
+    for(let i=0; i<10; i++) { ctx.fillRect(i*25, 0, 5, 256); ctx.fillRect(0, i*25, 256, 5); }
+  } else if (type === 'shoes_sneakers') {
+    ctx.fillStyle = '#f3f4f6'; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#3b82f6'; ctx.fillRect(0, 100, 256, 50); // stripe
+  } else if (type === 'shoes_boots') {
+    ctx.fillStyle = '#78350f'; ctx.fillRect(0,0,256,256); // brown
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+const textureCache: Record<string, THREE.Texture> = {};
+function getTexture(type: string) {
+  if (!type) return null;
+  if (!textureCache[type]) {
+    textureCache[type] = createTexture(type);
+  }
+  return textureCache[type];
+}
 
 function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: Avatar3DProps) {
   const group = useRef<THREE.Group>(null);
@@ -30,45 +90,42 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
   const body = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
 
-  const jColor = colorMap[jacket] || '#6b7280';
-  const pColor = colorMap[pants] || '#6b7280';
-  const sColor = colorMap[shoes] || '#6b7280';
+  const materials = useMemo(() => {
+    const jTex = getTexture(jacket) || getTexture('leather_black');
+    const pTex = getTexture(pants) || getTexture('denim_blue');
+    const sTex = getTexture(shoes) || getTexture('shoes_sneakers');
 
-  const materials = useMemo(() => ({
-    head: new THREE.MeshStandardMaterial({ color: '#f3f4f6', roughness: 0.2, metalness: 0.1 }),
-    eye: new THREE.MeshBasicMaterial({ color: danceState === 'miss' ? '#ef4444' : '#22d3ee', toneMapped: false }),
-    jacket: new THREE.MeshStandardMaterial({ color: jColor, roughness: 0.4 }),
-    pants: new THREE.MeshStandardMaterial({ color: pColor, roughness: 0.5 }),
-    shoes: new THREE.MeshStandardMaterial({ color: sColor, roughness: 0.3 })
-  }), [jColor, pColor, sColor, danceState]);
+    return {
+      head: new THREE.MeshStandardMaterial({ color: '#f3f4f6', roughness: 0.2, metalness: 0.1 }),
+      eye: new THREE.MeshBasicMaterial({ color: danceState === 'miss' ? '#ef4444' : '#22d3ee', toneMapped: false }),
+      jacket: new THREE.MeshStandardMaterial({ map: jTex, roughness: 0.7, color: '#ffffff' }),
+      pants: new THREE.MeshStandardMaterial({ map: pTex, roughness: 0.9, color: '#ffffff' }),
+      shoes: new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.5, color: '#ffffff' })
+    };
+  }, [jacket, pants, shoes, danceState]);
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (!group.current || !leftArm.current || !rightArm.current || !leftLeg.current || !rightLeg.current || !body.current || !head.current) return;
 
-    // Beats per second. PI means one full swing per beat.
     const beat = t * (bpm / 60) * Math.PI;
 
     if (danceState === 'dancing') {
       
       if (intensity >= 2.5) {
         // --- MOONWALK ---
-        // Character turns sideways and slides back and forth
         group.current.rotation.y = Math.PI / 2;
-        group.current.position.x = Math.sin(t * 0.5) * 1.5; // Slide sideways smoothly
+        group.current.position.x = Math.sin(t * 0.5) * 1.5; 
         
         body.current.position.y = Math.sin(beat * 2) * 0.05 + 1.15;
-        head.current.rotation.y = -Math.PI / 2; // Look at camera
+        head.current.rotation.y = -Math.PI / 2; 
         head.current.rotation.x = Math.sin(beat) * 0.1;
 
-        // Legs doing the moonwalk illusion
         leftLeg.current.rotation.x = Math.sin(beat) * 0.5;
         leftLeg.current.position.y = Math.max(0, Math.sin(beat)) * 0.2 + 0.3;
-        
         rightLeg.current.rotation.x = Math.sin(beat + Math.PI) * 0.5;
         rightLeg.current.position.y = Math.max(0, Math.sin(beat + Math.PI)) * 0.2 + 0.3;
 
-        // Arms smoothly swinging
         leftArm.current.rotation.x = -Math.sin(beat) * 0.4;
         rightArm.current.rotation.x = -Math.sin(beat + Math.PI) * 0.4;
         
@@ -77,19 +134,15 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
         group.current.rotation.y = Math.sin(beat * 0.5) * 0.4;
         group.current.position.x = 0;
         
-        body.current.position.y = Math.abs(Math.sin(beat)) * 0.3 + 1.1; // Big bounces
+        body.current.position.y = Math.abs(Math.sin(beat)) * 0.3 + 1.1; 
         
-        // Arms throwing hands up
         leftArm.current.rotation.x = Math.sin(beat) * 1.5 - 1;
         leftArm.current.rotation.z = Math.cos(beat) * 0.5 + 0.5;
-        
         rightArm.current.rotation.x = Math.sin(beat + Math.PI) * 1.5 - 1;
         rightArm.current.rotation.z = -Math.cos(beat) * 0.5 - 0.5;
 
-        // High steps
         leftLeg.current.rotation.x = Math.sin(beat) * 0.6;
         leftLeg.current.position.y = Math.max(0, Math.sin(beat)) * 0.5 + 0.3;
-        
         rightLeg.current.rotation.x = Math.sin(beat + Math.PI) * 0.6;
         rightLeg.current.position.y = Math.max(0, Math.sin(beat + Math.PI)) * 0.5 + 0.3;
 
@@ -105,13 +158,11 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
 
         leftArm.current.rotation.x = Math.sin(beat) * 0.8;
         leftArm.current.rotation.z = 0.2;
-        
         rightArm.current.rotation.x = Math.sin(beat + Math.PI) * 0.8;
         rightArm.current.rotation.z = -0.2;
 
         leftLeg.current.rotation.x = Math.sin(beat) * 0.4;
         leftLeg.current.position.y = Math.max(0, Math.sin(beat)) * 0.2 + 0.3;
-        
         rightLeg.current.rotation.x = Math.sin(beat + Math.PI) * 0.4;
         rightLeg.current.position.y = Math.max(0, Math.sin(beat + Math.PI)) * 0.2 + 0.3;
 
@@ -120,7 +171,6 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
       }
 
     } else if (danceState === 'miss') {
-      // Slumped sad pose
       body.current.position.y = 1.0;
       group.current.rotation.y = 0;
       group.current.position.x = 0;
@@ -135,11 +185,10 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
       rightLeg.current.rotation.x = 0;
       rightLeg.current.position.y = 0.3;
 
-      head.current.rotation.x = 0.5; // Looking down
+      head.current.rotation.x = 0.5; 
       head.current.rotation.y = 0;
       
     } else {
-      // Idle breathing
       body.current.position.y = Math.sin(t * 2) * 0.05 + 1.2;
       group.current.rotation.y = Math.sin(t * 0.5) * 0.1;
       group.current.position.x = 0;
@@ -181,14 +230,14 @@ function RobotModel({ jacket, pants, shoes, danceState, intensity, bpm = 120 }: 
         <mesh ref={leftArm} position={[-0.55, 0.3, 0]} material={materials.jacket} castShadow>
           <boxGeometry args={[0.3, 0.8, 0.3]} />
           <mesh position={[0, -0.4, 0]} material={materials.head}>
-            <boxGeometry args={[0.2, 0.2, 0.2]} />
+             <boxGeometry args={[0.2, 0.2, 0.2]} />
           </mesh>
         </mesh>
 
         <mesh ref={rightArm} position={[0.55, 0.3, 0]} material={materials.jacket} castShadow>
           <boxGeometry args={[0.3, 0.8, 0.3]} />
           <mesh position={[0, -0.4, 0]} material={materials.head}>
-            <boxGeometry args={[0.2, 0.2, 0.2]} />
+             <boxGeometry args={[0.2, 0.2, 0.2]} />
           </mesh>
         </mesh>
       </group>

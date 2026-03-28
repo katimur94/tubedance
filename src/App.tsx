@@ -5,6 +5,7 @@ import Game from './components/Game';
 import { PlaylistManager } from './components/PlaylistManager';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { LockerRoom, PlayerProfile } from './components/LockerRoom';
+import { Wardrobe } from './components/Wardrobe';
 import { Auth } from './components/Auth';
 import { supabase } from './lib/supabase';
 
@@ -16,14 +17,14 @@ const getDeviceId = () => {
 
 const DEFAULT_PROFILE: PlayerProfile = {
   level: 1, exp: 0,
-  jacket: 'bg-gray-500', pants: 'bg-gray-500', shoes: 'bg-gray-500'
+  jacket: 'leather_black', pants: 'denim_blue', shoes: 'shoes_sneakers'
 };
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [guestMode, setGuestMode] = useState(false);
   
-  const [view, setView] = useState<'menu' | 'playlist_single' | 'lobby' | 'locker' | 'game'>('menu');
+  const [view, setView] = useState<'menu' | 'playlist_single' | 'lobby' | 'locker' | 'wardrobe' | 'game'>('menu');
   const [playlist, setPlaylist] = useState<any[]>([]);
   const [roomCode, setRoomCode] = useState<string>('');
   const [mode, setMode] = useState<'audition' | 'solo'>('audition');
@@ -35,7 +36,6 @@ export default function App() {
 
   const [username, setUsername] = useState('Dancer_' + Math.floor(Math.random() * 9999));
 
-  // Supabase Auth listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -51,28 +51,31 @@ export default function App() {
   }, []);
 
   const fetchOnlineProfile = async (uid: string) => {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
+    const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
     if (data) {
       const p = { level: data.level, exp: data.exp, jacket: data.jacket, pants: data.pants, shoes: data.shoes };
       setProfile(p);
       localStorage.setItem('tubedance_profile', JSON.stringify(p));
       if (data.username) setUsername(data.username);
     } else {
-      // First time login - Create Profile
       const baseName = session?.user?.email?.split('@')[0] || username;
       setUsername(baseName);
       await supabase.from('profiles').upsert({ id: uid, username: baseName, ...profile });
     }
   };
 
-  const handleProfileUpdate = async (newProfile: PlayerProfile) => {
+  const handleProfileUpdate = async (newProfile: PlayerProfile, newUsername?: string) => {
     setProfile(newProfile);
     localStorage.setItem('tubedance_profile', JSON.stringify(newProfile));
     
+    if (newUsername) {
+      setUsername(newUsername);
+    }
+
     if (session?.user) {
       await supabase.from('profiles').upsert({ 
         id: session.user.id, 
-        username,
+        username: newUsername || username,
         ...newProfile 
       });
     }
@@ -111,7 +114,7 @@ export default function App() {
       expNeeded = newLevel * 1000;
     }
     
-    handleProfileUpdate({ ...profile, level: newLevel, exp: newExp });
+    handleProfileUpdate({ ...profile, level: newLevel, exp: newExp }, username);
     setView('menu');
   };
 
@@ -125,7 +128,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-cyan-500/30 flex flex-col items-center justify-center p-6 relative overflow-x-hidden">
       
-      {/* Dynamic Background */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-40">
         <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-cyan-600/20 rounded-full blur-[150px] mix-blend-screen" />
         <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-pink-600/20 rounded-full blur-[150px] mix-blend-screen" />
@@ -135,7 +137,6 @@ export default function App() {
         <Auth onLogin={() => setGuestMode(true)} />
       ) : (
         <>
-          {/* Main Top Header Controls */}
           {view === 'menu' && (
              <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
                {session ? (
@@ -155,7 +156,7 @@ export default function App() {
              </div>
           )}
 
-          {view !== 'menu' && view !== 'game' && (
+          {view !== 'menu' && view !== 'game' && view !== 'locker' && view !== 'wardrobe' && (
             <button 
               onClick={() => setView('menu')}
               className="absolute top-6 left-6 z-50 flex items-center gap-2 px-6 py-3 bg-gray-900 border border-cyan-500/50 rounded-full hover:bg-cyan-900/50 transition-colors uppercase tracking-widest text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.2)]"
@@ -164,7 +165,6 @@ export default function App() {
             </button>
           )}
 
-          {/* View Routing */}
           <AnimatePresence mode="wait">
             {view === 'menu' && (
               <motion.div 
@@ -181,38 +181,49 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl">
                   {/* Single Player */}
                   <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('playlist_single')}
-                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-cyan-400 rounded-[40px] p-10 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-all group relative overflow-hidden">
+                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-cyan-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-all group relative overflow-hidden flex flex-col items-center text-center">
                     <div className="absolute right-0 top-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/30 transition-all" />
-                    <div className="bg-cyan-500 text-black w-20 h-20 rounded-full flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform">
-                      <Play className="w-10 h-10 ml-2" fill="currentColor" />
+                    <div className="bg-cyan-500 text-black w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+                      <Play className="w-8 h-8 ml-1" fill="currentColor" />
                     </div>
-                    <h3 className="text-3xl font-black mb-3 text-white group-hover:text-cyan-400 transition-colors uppercase tracking-widest">Singleplayer</h3>
-                    <p className="text-gray-400 leading-relaxed font-bold text-sm">Spiele alle Playlists, farme offline heftige EXP für dein Profil und brich Highscores.</p>
+                    <h3 className="text-2xl font-black mb-2 text-white group-hover:text-cyan-400 transition-colors uppercase tracking-widest">Singleplayer</h3>
+                    <p className="text-gray-400 font-bold text-xs">Offline EXP & Highscores.</p>
                   </motion.div>
 
                   {/* Multiplayer */}
                   <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('lobby')}
-                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-pink-500 rounded-[40px] p-10 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(236,72,153,0.4)] transition-all group relative overflow-hidden">
+                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-pink-500 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(236,72,153,0.4)] transition-all group relative overflow-hidden flex flex-col items-center text-center">
                     <div className="absolute right-0 top-0 w-32 h-32 bg-pink-500/10 rounded-full blur-2xl group-hover:bg-pink-500/30 transition-all" />
-                    <div className="bg-pink-500 text-black w-20 h-20 rounded-full flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform">
-                      <Users className="w-10 h-10" fill="currentColor" />
+                    <div className="bg-pink-500 text-black w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+                      <Users className="w-8 h-8" fill="currentColor" />
                     </div>
-                    <h3 className="text-3xl font-black mb-3 text-white group-hover:text-pink-400 transition-colors uppercase tracking-widest">Multiplayer</h3>
-                    <p className="text-gray-400 leading-relaxed font-bold text-sm">Tritt gegen andere Tänzer an! Zeige ihnen deinen 3D-Avatar im Live-Ranking.</p>
+                    <h3 className="text-2xl font-black mb-2 text-white group-hover:text-pink-400 transition-colors uppercase tracking-widest">Multiplayer</h3>
+                    <p className="text-gray-400 font-bold text-xs">Tritt gegen andere an.</p>
                   </motion.div>
 
-                  {/* Locker Room */}
+                  {/* Locker Room (Procedural) */}
                   <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('locker')}
-                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-yellow-400 rounded-[40px] p-10 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(250,204,21,0.4)] transition-all group relative overflow-hidden">
+                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-yellow-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(250,204,21,0.4)] transition-all group relative overflow-hidden flex flex-col items-center text-center">
                     <div className="absolute right-0 top-0 w-32 h-32 bg-yellow-400/10 rounded-full blur-2xl group-hover:bg-yellow-400/30 transition-all" />
-                    <div className="bg-yellow-400 text-black w-20 h-20 rounded-full flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform">
-                      <Shirt className="w-10 h-10" fill="currentColor" />
+                    <div className="bg-yellow-400 text-black w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+                      <Shirt className="w-8 h-8" fill="currentColor" />
                     </div>
-                    <h3 className="text-3xl font-black mb-3 text-white group-hover:text-yellow-400 transition-colors uppercase tracking-widest">Locker Room</h3>
-                    <p className="text-gray-400 leading-relaxed font-bold text-sm">Hol dir frische Farben für deinen 3D-Bot. Neue Styles gibt es beim Level-Up.</p>
+                    <h3 className="text-2xl font-black mb-2 text-white group-hover:text-yellow-400 transition-colors uppercase tracking-widest">Procedural Locker</h3>
+                    <p className="text-gray-400 font-bold text-xs">Camo & Denim für Standard-Bot.</p>
+                  </motion.div>
+
+                  {/* Wardrobe (GLB) */}
+                  <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('wardrobe')}
+                    className="bg-gray-900/80 backdrop-blur-xl border border-gray-700 hover:border-purple-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] transition-all group relative overflow-hidden flex flex-col items-center text-center">
+                    <div className="absolute right-0 top-0 w-32 h-32 bg-purple-400/10 rounded-full blur-2xl group-hover:bg-purple-400/30 transition-all" />
+                    <div className="bg-purple-500 text-white w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+                      <Shirt className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-2xl font-black mb-2 text-white group-hover:text-purple-400 transition-colors uppercase tracking-widest">3D Wardrobe</h3>
+                    <p className="text-gray-400 font-bold text-xs">Zeige dein Custom .glb Modell.</p>
                   </motion.div>
                 </div>
               </motion.div>
@@ -235,8 +246,14 @@ export default function App() {
             )}
 
             {view === 'locker' && (
-              <motion.div key="locker" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="w-full z-10 pt-6">
-                <LockerRoom profile={profile} onSave={handleProfileUpdate} onBack={() => setView('menu')} />
+              <motion.div key="locker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50">
+                <LockerRoom profile={profile} username={username} onSave={handleProfileUpdate} onBack={() => setView('menu')} />
+              </motion.div>
+            )}
+
+            {view === 'wardrobe' && (
+              <motion.div key="wardrobe" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50">
+                <Wardrobe userId={session?.user?.id || getDeviceId()} onBack={() => setView('menu')} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -253,13 +270,6 @@ export default function App() {
                 onBack={() => setView('menu')}
                 onGameEnd={handleGameEnd}
               />
-            </div>
-          )}
-
-          {/* Simple Env Check Warning */}
-          {!import.meta.env.VITE_SUPABASE_URL && view === 'menu' && (
-            <div className="absolute bottom-6 bg-red-900/50 border border-red-500/50 text-red-200 px-6 py-3 rounded-xl flex items-center gap-3 font-bold z-50 shadow-2xl">
-              <Shield /> .env Supabase Variablen fehlen!
             </div>
           )}
         </>
