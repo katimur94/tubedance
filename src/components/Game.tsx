@@ -227,7 +227,7 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
                     {p.profile && (
                       <div className="w-14 h-14 rounded-full bg-black/50 border-2 border-gray-700 relative overflow-hidden flex items-center justify-center shrink-0">
                         {/* Minified 3D View */}
-                        <Avatar3D jacket={p.profile.jacket} pants={p.profile.pants} shoes={p.profile.shoes} danceState={p.danceState || 'idle'} intensity={p.intensity || 1} />
+                        <Avatar3D jacket={p.profile.jacket} pants={p.profile.pants} shoes={p.profile.shoes} danceState={p.danceState || 'idle'} intensity={p.intensity || 1} bpm={currentSong ? (currentSong.bpm || 120) : 120} />
                       </div>
                     )}
                     <div className="flex flex-col flex-1 overflow-hidden">
@@ -256,6 +256,7 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
               shoes={profile.shoes} 
               danceState={avatarDance} 
               intensity={intensity}
+              bpm={currentSong.bpm || 120}
             />
           </div>
 

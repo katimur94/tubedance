@@ -19,11 +19,11 @@ interface LockerRoomProps {
 
 const COLORS = [
   { name: 'Basic Gray', class: 'bg-gray-500', reqLevel: 1 },
-  { name: 'Crimson Red', class: 'bg-red-500', reqLevel: 2 },
-  { name: 'Ocean Blue', class: 'bg-blue-500', reqLevel: 3 },
-  { name: 'Forest Green', class: 'bg-green-500', reqLevel: 4 },
-  { name: 'Neon Pink', class: 'bg-pink-500', reqLevel: 6 },
-  { name: 'Cyber Cyan', class: 'bg-cyan-400', reqLevel: 8 },
+  { name: 'Crimson Red', class: 'bg-red-500', reqLevel: 1 },
+  { name: 'Ocean Blue', class: 'bg-blue-500', reqLevel: 1 },
+  { name: 'Forest Green', class: 'bg-green-500', reqLevel: 1 },
+  { name: 'Neon Pink', class: 'bg-pink-500', reqLevel: 3 },
+  { name: 'Cyber Cyan', class: 'bg-cyan-400', reqLevel: 5 },
   { name: 'Golden Swag', class: 'bg-yellow-400', reqLevel: 10 },
   { name: 'Void Black', class: 'bg-gray-900', reqLevel: 15 },
   { name: 'God Mode', class: 'bg-gradient-to-r from-purple-500 via-pink-500 to-red-500', reqLevel: 20 },
