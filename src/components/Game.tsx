@@ -43,6 +43,7 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
   // 3D Avatar state
   const [avatarDance, setAvatarDance] = useState<'idle' | 'dancing' | 'miss'>('idle');
   const [intensity, setIntensity] = useState(1);
+  const [countdown, setCountdown] = useState<number | null>(null);
   
   const playerRef = useRef<any>(null);
   const channelRef = useRef<any>(null);
@@ -91,7 +92,9 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
       interval = setInterval(() => {
         if (playerRef.current?.getCurrentTime && playerRef.current?.getDuration) {
           const duration = playerRef.current.getDuration();
-          if (duration > 0 && playerRef.current.getCurrentTime() >= duration - 10) {
+          const currentTime = playerRef.current.getCurrentTime();
+          
+          if (duration > 20 && currentTime >= duration - 10) {
             setGamePhase('song_ended');
             try { playerRef.current.pauseVideo(); } catch(e) {}
           }
@@ -100,6 +103,22 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
     }
     return () => clearInterval(interval);
   }, [gamePhase]);
+
+  // Countdown Logic
+  useEffect(() => {
+    let timer: any;
+    if (countdown !== null && countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (countdown === 0) {
+      // Zeige GO! kurz an, bevor das Spiel startet
+      timer = setTimeout(() => {
+        setCountdown(null);
+        setGamePhase('playing');
+        try { playerRef.current?.playVideo(); } catch(e) {}
+      }, 800);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const handleNextSong = () => {
     if (currentSongIndex + 1 < playlist.length) {
@@ -164,7 +183,11 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
             opts={{ width: '100%', height: '100%', playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, showinfo: 0, start: 10 } }}
             onReady={(e) => { playerRef.current = e.target; if (gamePhase === 'playing') e.target.playVideo(); else e.target.pauseVideo(); e.target.setVolume(100); }}
             onStateChange={e => { if (e.data === 0) setGamePhase('song_ended'); }}
-            onError={() => setGamePhase('song_ended')}
+            onError={(e) => { 
+                console.error("YouTube Error", e);
+                alert("YouTube konnte dieses Video nicht laden (evtl. privat oder gesperrt).");
+                setGamePhase('song_ended'); 
+            }}
             className="w-[150vw] h-[150vh] min-w-[100vw] min-h-[100vh] scale-110 pointer-events-none" 
             iframeClassName="w-full h-full object-cover pointer-events-none" 
           />
@@ -249,11 +272,11 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
       )}
 
       {/* Main Game Area */}
-      {gamePhase === 'playing' && currentSong && (
+      {(gamePhase === 'playing' || countdown !== null) && currentSong && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-end pb-32 pointer-events-none">
           
           {/* Main 3D Avatar Showcase */}
-          <div className="mb-4 pointer-events-auto relative w-full h-[35vh] flex justify-center items-end">
+          <div className="mb-4 pointer-events-auto relative w-full h-[50vh] flex justify-center items-end">
              {profile.rpm_url ? (
                 <PlayerAvatar 
                    modelUrl={profile.rpm_url}
@@ -292,11 +315,26 @@ export default function Game({ playlist, mode, roomCode, userId, username, profi
               {currentSong ? currentSong.title : 'Kein Song geladen'}
             </h2>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => { setGamePhase('playing'); try { playerRef.current?.playVideo(); } catch(e) {} }}
+              onClick={() => { setCountdown(3); setAvatarDance('dancing'); }}
               className="px-20 py-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-full font-black text-3xl tracking-[0.2em] uppercase shadow-[0_0_40px_rgba(6,182,212,0.6)]">
               STARTEN
             </motion.button>
           </div>
+        </div>
+      )}
+
+      {/* Countdown Overlay */}
+      {countdown !== null && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none">
+          <motion.div 
+            key={countdown}
+            initial={{ scale: 2, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            exit={{ scale: 0.5, opacity: 0 }}
+            className="text-[200px] font-black text-white drop-shadow-[0_0_50px_rgba(6,182,212,0.8)]"
+          >
+            {countdown > 0 ? countdown : 'GO!'}
+          </motion.div>
         </div>
       )}
 

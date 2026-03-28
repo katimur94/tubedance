@@ -56,8 +56,8 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ modelUrl, danceState
   const activeUrl = modelUrl || '/models/placeholder.glb';
 
   return (
-    <div className="w-full h-full relative" style={{ minHeight: '300px' }}>
-      <Canvas camera={{ position: [0, 1.5, 3.5], fov: 45 }} shadows>
+    <div className="w-full h-full relative" style={{ minHeight: '450px' }}>
+      <Canvas camera={{ position: [0, 1.8, 3.8], fov: 40 }} shadows>
         <Suspense fallback={null}>
           {/* Beleuchtung für besseres Aussehen */}
           <ambientLight intensity={0.6} />
