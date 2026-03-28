@@ -22,38 +22,38 @@ interface Playlist {
 
 const LOCAL_PRESETS: Playlist[] = [
   {
-    id: 'local_sehr_leicht', title: '🟢 Sehr Leicht', is_preset: true, created_by: null,
+    id: 'local_sehr_leicht', title: '🟢 Sehr Leicht (~80-95 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p1', video_id: 'K4DyBUG242c', title: 'LFZ - Popsicle', bpm: 120, position: 1 },
-      { id: 'p2', video_id: 'TW9d8vYrVFQ', title: 'Elektronomia - Sky High', bpm: 128, position: 2 }
+      { id: 'p1', video_id: 'AOeY-nDp7hI', title: 'Alan Walker - Fade', bpm: 90, position: 1 },
+      { id: 'p2', video_id: 'p7ZsBPK656s', title: 'Syn Cole - Feel Good (Chill Mix)', bpm: 85, position: 2 }
     ]
   },
   {
-    id: 'local_leicht', title: '🔵 Leicht', is_preset: true, created_by: null,
+    id: 'local_leicht', title: '🔵 Leicht (~100-115 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p3', video_id: 'K4CyUe23A-c', title: 'Cartoon - On & On', bpm: 145, position: 1 },
-      { id: 'p4', video_id: 'tX5o2uLw47o', title: 'Unknown Brain - Superhero', bpm: 150, position: 2 }
+      { id: 'p3', video_id: 'J2X5mJ3HDYE', title: 'NCS Pop Mix', bpm: 105, position: 1 },
+      { id: 'p4', video_id: '8vG7F0h2wFM', title: 'Cadmium - Melody', bpm: 110, position: 2 }
     ]
   },
   {
-    id: 'local_mittel', title: '🟡 Mittel', is_preset: true, created_by: null,
+    id: 'local_mittel', title: '🟡 Mittel (~120-135 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p5', video_id: '3nQNiWdeH2Q', title: 'Janji - Heroes Tonight', bpm: 128, position: 1 },
+      { id: 'p5', video_id: 'TW9d8vYrVFQ', title: 'Elektronomia - Sky High', bpm: 128, position: 1 },
       { id: 'p6', video_id: '6FNHe3kf8_s', title: 'Different Heaven - Nekozilla', bpm: 128, position: 2 }
     ]
   },
   {
-    id: 'local_schwer', title: '🟠 Schwer', is_preset: true, created_by: null,
+    id: 'local_schwer', title: '🟠 Schwer (~140-155 BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p7', video_id: '4ZvnQ_2BfV0', title: 'Lensko - Let\'s Go!', bpm: 128, position: 1 },
-      { id: 'p8', video_id: 'AOeY-nDp7hI', title: 'Alan Walker - Fade', bpm: 90, position: 2 }
+      { id: 'p7', video_id: 'K4CyUe23A-c', title: 'Cartoon - On & On', bpm: 144, position: 1 },
+      { id: 'p8', video_id: 'tX5o2uLw47o', title: 'Unknown Brain - Superhero', bpm: 150, position: 2 }
     ]
   },
   {
-    id: 'local_extrem', title: '🔴 Extrem', is_preset: true, created_by: null,
+    id: 'local_extrem', title: '🔴 Extrem (160+ BPM)', is_preset: true, created_by: null,
     songs: [
-      { id: 'p9', video_id: 'IIrCDAV3EgI', title: 'Tobu - Hope', bpm: 128, position: 1 },
-      { id: 'p10', video_id: 'yJg-Y5byMMw', title: 'Aero Chord - Surface', bpm: 140, position: 2 }
+      { id: 'p9', video_id: 'uzjNgWav3nk', title: 'NCS Hardstyle / DNB', bpm: 175, position: 1 },
+      { id: 'p10', video_id: 'yJg-Y5byMMw', title: 'Aero Chord - Surface', bpm: 190, position: 2 }
     ]
   }
 ];
