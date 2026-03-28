@@ -1,25 +1,64 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, Play, ListVideo, Search, Youtube } from 'lucide-react';
+import { Plus, Play, ListVideo, Search, Youtube, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-interface Playlist {
-  id: string;
-  title: string;
-  is_preset: boolean;
-  created_by: string | null;
-}
 
 interface PlaylistSong {
   id: string;
-  playlist_id: string;
+  playlist_id?: string;
   video_id: string;
   title: string;
   bpm: number | null;
   position: number;
 }
 
-export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playlistId: string) => void }) {
+interface Playlist {
+  id: string;
+  title: string;
+  is_preset: boolean;
+  created_by: string | null;
+  songs?: PlaylistSong[];
+}
+
+const LOCAL_PRESETS: Playlist[] = [
+  {
+    id: 'local_sehr_leicht', title: '🟢 Sehr Leicht', is_preset: true, created_by: null,
+    songs: [
+      { id: 'p1', video_id: 'kPa7bsKwL-c', title: 'Relaxing Lofi', bpm: 80, position: 1 },
+      { id: 'p2', video_id: '5qap5aO4i9A', title: 'Lofi Girl Live', bpm: 85, position: 2 }
+    ]
+  },
+  {
+    id: 'local_leicht', title: '🔵 Leicht', is_preset: true, created_by: null,
+    songs: [
+      { id: 'p3', video_id: 'fJ9rUzIMcZQ', title: 'Queen - Bohemian Rhapsody', bpm: 100, position: 1 },
+      { id: 'p4', video_id: 'kJQP7kiw5Fk', title: 'Luis Fonsi - Despacito', bpm: 105, position: 2 }
+    ]
+  },
+  {
+    id: 'local_mittel', title: '🟡 Mittel', is_preset: true, created_by: null,
+    songs: [
+      { id: 'p5', video_id: 'OPf0YbXqDm0', title: 'Mark Ronson - Uptown Funk', bpm: 115, position: 1 },
+      { id: 'p6', video_id: '9bZkp7q19f0', title: 'PSY - GANGNAM STYLE', bpm: 132, position: 2 }
+    ]
+  },
+  {
+    id: 'local_schwer', title: '🟠 Schwer', is_preset: true, created_by: null,
+    songs: [
+      { id: 'p7', video_id: 'VHoT4N43jK8', title: 'Skrillex - Bangarang', bpm: 145, position: 1 },
+      { id: 'p8', video_id: 'CSvFpBOe8eY', title: 'System Of A Down - Chop Suey!', bpm: 150, position: 2 }
+    ]
+  },
+  {
+    id: 'local_extrem', title: '🔴 Extrem', is_preset: true, created_by: null,
+    songs: [
+      { id: 'p9', video_id: 'YJVmu6yttsq', title: 'Darude - Sandstorm', bpm: 165, position: 1 },
+      { id: 'p10', video_id: 'WSeNSzJ2-Jw', title: 'Camellia - Ghost', bpm: 200, position: 2 }
+    ]
+  }
+];
+
+export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (songs: PlaylistSong[]) => void }) {
   const [activeTab, setActiveTab] = useState<'presets' | 'mine'>('presets');
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
@@ -27,9 +66,7 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
   const [loading, setLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState('');
-
-  // Note: For fully working "Meine Playlists", user needs to be authenticated.
-  // We'll mock user_id context or assume an anon-user for now.
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchPlaylists();
@@ -37,24 +74,31 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
 
   useEffect(() => {
     if (selectedPlaylist) {
-      fetchSongs(selectedPlaylist.id);
+      if (selectedPlaylist.id.startsWith('local_')) {
+        setSongs(selectedPlaylist.songs || []);
+      } else {
+        fetchSongs(selectedPlaylist.id);
+      }
     }
   }, [selectedPlaylist]);
 
   const fetchPlaylists = async () => {
     setLoading(true);
-    let query = supabase.from('playlists').select('*');
+    setSearchTerm('');
+    setSelectedPlaylist(null);
+    setSongs([]);
 
     if (activeTab === 'presets') {
-      query = query.eq('is_preset', true);
+      // Use Hardcoded Categories instead of Supabase (for default music without extra setup)
+      setPlaylists(LOCAL_PRESETS);
     } else {
-      // In a real app we'd filter by logged-in user: query.eq('created_by', currentUser.id)
-      query = query.eq('is_preset', false); 
-    }
-
-    const { data, error } = await query;
-    if (!error && data) {
-      setPlaylists(data);
+      // Fetch user's custom playlists
+      const { data, error } = await supabase.from('playlists').select('*').eq('is_preset', false);
+      if (!error && data) {
+        setPlaylists(data);
+      } else {
+        setPlaylists([]);
+      }
     }
     setLoading(false);
   };
@@ -66,9 +110,7 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
       .eq('playlist_id', playlistId)
       .order('position', { ascending: true });
 
-    if (!error && data) {
-      setSongs(data);
-    }
+    if (!error && data) setSongs(data);
   };
 
   const extractYoutubeId = (url: string) => {
@@ -82,12 +124,10 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
     if (!videoId) return alert('Ungültiger YouTube Link');
 
     try {
-      // Fetch metadata using noembed (No API key needed)
       const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
       const metadata = await res.json();
       const title = metadata.title || 'Unknown Title';
 
-      // 1. Create Playlist
       const { data: pData, error: pError } = await supabase
         .from('playlists')
         .insert([{ title: title, is_preset: false }])
@@ -96,20 +136,17 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
       
       if (pError) throw pError;
 
-      // 2. Add Song
-      await supabase
-        .from('playlist_songs')
-        .insert([{
-          playlist_id: pData.id,
-          video_id: videoId,
-          title: title,
-          position: 1,
-          bpm: 120 // Default bpm
-        }]);
+      await supabase.from('playlist_songs').insert([{
+        playlist_id: pData.id,
+        video_id: videoId,
+        title: title,
+        position: 1,
+        bpm: 120 
+      }]);
       
       setShowImport(false);
       setImportUrl('');
-      fetchPlaylists(); // Refresh
+      if (activeTab === 'mine') fetchPlaylists();
       alert('Playlist erfolgreich importiert!');
     } catch (e: any) {
       console.error(e);
@@ -117,29 +154,31 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
     }
   };
 
+  const filteredPlaylists = playlists.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase()));
+
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl shadow-2xl overflow-hidden text-gray-100">
+    <div className="w-full max-w-5xl mx-auto p-6 bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-3xl shadow-2xl overflow-hidden text-gray-100 flex flex-col h-[80vh]">
       
       {/* Header Tabs */}
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-800">
         <div className="flex gap-4">
           <button
             onClick={() => setActiveTab('presets')}
-            className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${activeTab === 'presets' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-2 px-6 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'presets' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
           >
-            Presets
+            <Sparkles size={16} /> App Kategorien
           </button>
           <button
             onClick={() => setActiveTab('mine')}
-            className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${activeTab === 'mine' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-2 px-6 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'mine' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
           >
-            Meine Playlists
+            <ListVideo size={16} /> Eigene Playlists
           </button>
         </div>
         
         <button
           onClick={() => setShowImport(!showImport)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/50 rounded-full hover:bg-green-500/30 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/50 rounded-full hover:bg-green-500/30 transition-colors font-semibold text-sm shadow-[0_0_15px_rgba(16,185,129,0.1)]"
         >
           <Plus size={16} /> Import YouTube
         </button>
@@ -148,25 +187,15 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
       {/* Import Flyout */}
       <AnimatePresence>
         {showImport && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="mb-6 overflow-hidden"
-          >
-            <div className="flex gap-2 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="mb-6 overflow-hidden">
+            <div className="flex gap-2 p-4 bg-gray-800/80 rounded-xl border border-gray-700 shadow-inner">
               <Youtube className="text-red-500 w-8" />
               <input
-                type="text"
-                placeholder="YouTube URL pasten (z.B. https://youtube.com/watch?v=...)"
-                className="flex-1 bg-transparent border-b border-gray-600 focus:border-cyan-500 outline-none px-2 text-white"
-                value={importUrl}
-                onChange={e => setImportUrl(e.target.value)}
+                type="text" placeholder="YouTube URL pasten..."
+                className="flex-1 bg-transparent border-b border-gray-600 focus:border-cyan-500 outline-none px-2 text-white placeholder-gray-500"
+                value={importUrl} onChange={e => setImportUrl(e.target.value)}
               />
-              <button 
-                onClick={handleImport}
-                className="px-4 py-1 bg-cyan-600 text-white rounded hover:bg-cyan-500 transition-colors"
-              >
+              <button onClick={handleImport} className="px-6 py-2 bg-cyan-600 font-bold text-white rounded-lg hover:bg-cyan-500 transition-colors shadow-lg shadow-cyan-500/30">
                 Hinzufügen
               </button>
             </div>
@@ -174,58 +203,79 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (playl
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8 min-h-0">
         {/* Playlist List */}
-        <div className="space-y-3">
-          <h3 className="text-gray-400 font-bold tracking-widest uppercase text-sm mb-4">Verfügbare Playlists</h3>
-          {loading ? (
-            <div className="text-gray-500">Lade Playlists...</div>
-          ) : playlists.length === 0 ? (
-            <div className="text-gray-500">Keine Playlists gefunden.</div>
-          ) : (
-            playlists.map(p => (
-              <div
-                key={p.id}
-                onClick={() => setSelectedPlaylist(p)}
-                className={`p-4 rounded-xl cursor-pointer transition-all border ${selectedPlaylist?.id === p.id ? 'bg-cyan-900/40 border-cyan-500/50 scale-105' : 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-500'}`}
-              >
-                <div className="flex items-center gap-3">
-                  <ListVideo className={selectedPlaylist?.id === p.id ? 'text-cyan-400' : 'text-gray-400'} />
-                  <span className="font-semibold">{p.title}</span>
-                </div>
-              </div>
-            ))
-          )}
+        <div className="flex flex-col space-y-4 h-full">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <input 
+              type="text" 
+              placeholder="Suchen..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-cyan-500 transition-colors"
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+            {loading ? (
+              <div className="text-center p-8 text-gray-500">Lade...</div>
+            ) : filteredPlaylists.length === 0 ? (
+              <div className="text-center p-8 text-gray-500 bg-gray-800/50 rounded-xl border border-dashed border-gray-700">Keine gefunden.</div>
+            ) : (
+              filteredPlaylists.map(p => (
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  key={p.id}
+                  onClick={() => setSelectedPlaylist(p)}
+                  className={`p-4 rounded-xl cursor-pointer transition-all border ${selectedPlaylist?.id === p.id ? 'bg-gradient-to-r from-cyan-900/60 to-blue-900/40 border-cyan-500/60 shadow-[0_0_20px_rgba(6,182,212,0.2)]' : 'bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-500'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <ListVideo className={selectedPlaylist?.id === p.id ? 'text-cyan-400' : 'text-gray-400'} />
+                    <span className="font-bold text-lg tracking-wide">{p.title}</span>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Song List */}
-        <div className="bg-gray-800/30 rounded-2xl p-6 border border-gray-700">
+        <div className="bg-gray-800/40 rounded-3xl p-6 border border-gray-700 flex flex-col h-full overflow-hidden shadow-inner">
           {selectedPlaylist ? (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold">{selectedPlaylist.title}</h3>
+            <div className="flex flex-col h-full">
+              <div className="flex justify-between items-center pb-4 border-b border-gray-700/50 mb-4 shrink-0">
+                <h3 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">{selectedPlaylist.title}</h3>
                 <button
-                  onClick={() => onSelectPlaylist(selectedPlaylist.id)}
-                  className="flex items-center gap-2 px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-full shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all"
+                  onClick={() => onSelectPlaylist(songs)}
+                  disabled={songs.length === 0}
+                  className="flex items-center gap-2 px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-black rounded-full shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Play size={18} fill="currentColor" /> Spielen
                 </button>
               </div>
-              <div className="space-y-2">
+              <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
                 {songs.map((song, i) => (
-                  <div key={song.id} className="flex items-center gap-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-                    <span className="text-gray-500 font-mono text-sm w-4">{i + 1}.</span>
-                    <span className="flex-1 truncate text-sm">{song.title}</span>
-                    <span className="text-cyan-500/50 text-xs font-mono">{song.bpm || 120} BPM</span>
+                  <div key={song.id} className="flex items-center gap-4 p-4 bg-gray-900/80 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-colors">
+                    <span className="text-gray-500 font-black text-sm w-4">{i + 1}.</span>
+                    <span className="flex-1 truncate font-medium text-gray-200">{song.title}</span>
+                    <span className="text-cyan-400/80 text-xs font-mono font-bold bg-cyan-900/30 px-2 py-1 rounded">{song.bpm || 120} BPM</span>
                   </div>
                 ))}
-                {songs.length === 0 && <div className="text-gray-500 text-sm">Diese Playlist ist leer.</div>}
+                {songs.length === 0 && (
+                  <div className="h-full flex items-center justify-center text-gray-500 bg-gray-900/20 rounded-xl border border-dashed border-gray-700">
+                    Diese Playlist ist leer. Füge Songs hinzu!
+                  </div>
+                )}
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
-              <Search size={48} className="opacity-20" />
-              <p>Wähle eine Playlist aus, um die Songs zu sehen</p>
+            <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-6 opacity-60">
+              <div className="p-6 bg-gray-800 rounded-full">
+                <Search size={48} className="text-gray-600" />
+              </div>
+              <p className="text-lg font-medium tracking-wide">Wähle eine Kategorie oder Playlist</p>
             </div>
           )}
         </div>

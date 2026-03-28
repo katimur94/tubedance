@@ -17,11 +17,9 @@ export default function App() {
   const [roomCode, setRoomCode] = useState<string>('');
   const [mode, setMode] = useState<'audition' | 'solo'>('audition');
 
-  const handleSelectPlaylistSingle = async (playlistId: string) => {
-    // Fetch playlist songs
-    const { data } = await supabase.from('playlist_songs').select('*').eq('playlist_id', playlistId).order('position');
-    if (data && data.length > 0) {
-      setPlaylist(data);
+  const handleSelectPlaylistSingle = (songs: any[]) => {
+    if (songs && songs.length > 0) {
+      setPlaylist(songs);
       setMode('solo');
       setView('game');
     } else {
