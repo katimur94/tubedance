@@ -2,35 +2,44 @@ import React from 'react';
 import { AvatarCreator as RPMAvatarCreator } from '@readyplayerme/react-avatar-creator';
 
 interface AvatarCreatorProps {
-  onAvatarExported: (url: string) => void;
+  onAvatarExported: (avatarUrl: string) => void;
   onClose: () => void;
 }
 
-export function AvatarCreator({ onAvatarExported, onClose }: AvatarCreatorProps) {
-  const handleExport = (event: any) => {
-    // URL ist im event.data.url vorhanden
-    const url = event.data?.url || (typeof event === 'string' ? event : null);
-    if (url) {
-      onAvatarExported(url);
-    }
+export const AvatarCreator: React.FC<AvatarCreatorProps> = ({ onAvatarExported, onClose }) => {
+  // Das ist die kritische Konfiguration für RPM
+  const config = {
+    clearCache: true,
+    bodyType: 'fullbody', // Wir wollen den ganzen Körper für Tanz-Animationen
+    quickStart: false,
+    language: 'de',
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col pt-16 font-sans">
-       <div className="absolute top-0 left-0 w-full h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 z-50 shadow-2xl">
-         <h1 className="text-xl font-black text-white uppercase tracking-widest">Ready Player Me Editor</h1>
-         <button onClick={onClose} className="py-2 px-6 bg-red-900/50 hover:bg-red-600 text-white font-bold rounded-full transition-colors border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.4)]">
-           Abbrechen
-         </button>
-       </div>
-       
-       <div className="flex-1 w-full relative">
-         <RPMAvatarCreator 
-            subdomain="demo" 
-            config={{ clearCache: true, bodyType: 'fullbody' }} 
-            onAvatarExported={handleExport} 
-         />
-       </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="relative w-full max-w-5xl h-[90vh] bg-white rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.5)] border border-gray-700">
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 z-50 p-4 bg-red-600 text-white rounded-xl hover:bg-red-500 font-black shadow-lg uppercase tracking-widest text-xs transition-colors"
+        >
+          Editor Schließen
+        </button>
+        
+        <RPMAvatarCreator
+          subdomain="demo" 
+          config={config as any}
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          onAvatarExported={(event: any) => {
+            const url = event.data?.url || (typeof event === 'string' ? event : null);
+            if (url) {
+              console.log("Avatar erfolgreich erstellt. URL:", url);
+              onAvatarExported(url);
+            }
+          }}
+        />
+      </div>
     </div>
   );
-}
+};
+
+export default AvatarCreator;

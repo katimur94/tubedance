@@ -1,32 +1,32 @@
-import React, { useRef, Suspense } from 'react';
-import { useGLTF, OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import React, { Suspense, useEffect, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
+import { useGLTF, OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
 
-interface PlayerAvatarProps {
-  modelUrl: string;
-  danceState?: 'idle' | 'dancing' | 'miss';
-  intensity?: number;
-  bpm?: number;
-}
-
-function AvatarModel({ url, danceState = 'idle', intensity = 1, bpm = 120 }: PlayerAvatarProps & { url: string }) {
+// 1. Die Unterkomponente, die das eigentliche Modell lädt
+const Model = ({ url, danceState = 'idle', intensity = 1, bpm = 120 }: { url: string; danceState?: string; intensity?: number; bpm?: number }) => {
+  const { scene } = useGLTF(url);
   const group = useRef<THREE.Group>(null);
   
-  // Lädt die ReadyPlayerMe GLB Datei von der URL
-  const { scene } = useGLTF(url);
-  
+  // Optional: Schatten aktivieren und Materialien leicht anpassen
+  useEffect(() => {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+  }, [scene]);
+
   useFrame((state) => {
-    // Da RPM-Avatare standardmäßig keine Animationen (Mixamo Rigs) beinhalten,
-    // machen wir hier ein prozedurales Fallback-Posing für "Tanzen", 
-    // bis ein echtes Skelett-Mapping vorgenommen wird.
+    // Statisches Fallback-Tanzen ohne echtes Rig
     if (group.current) {
       const t = state.clock.getElapsedTime();
       const beat = t * (bpm / 60) * Math.PI;
 
       if (danceState === 'dancing') {
         const bounce = Math.abs(Math.sin(beat)) * 0.1 * intensity;
-        group.current.position.y = bounce - 0.9;
+        group.current.position.y = bounce - 1;
         group.current.rotation.y = Math.sin(beat * 0.5) * 0.2 * intensity;
       } else if (danceState === 'miss') {
         group.current.position.y = -1;
@@ -40,33 +40,56 @@ function AvatarModel({ url, danceState = 'idle', intensity = 1, bpm = 120 }: Pla
     }
   });
 
-  return <primitive ref={group} object={scene} castShadow />
+  // Wir positionieren das Modell leicht nach unten (y: -1), damit es besser auf dem Boden steht
+  return <primitive ref={group} object={scene} position={[0, -1, 0]} scale={1.2} />;
+};
+
+// 2. Die Hauptkomponente mit dem Canvas
+interface PlayerAvatarProps {
+  modelUrl: string | null | undefined;
+  danceState?: 'idle' | 'dancing' | 'miss';
+  intensity?: number;
+  bpm?: number;
 }
 
-export function PlayerAvatar(props: PlayerAvatarProps) {
+export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({ modelUrl, danceState, intensity, bpm }) => {
+  if (!modelUrl) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900/80 text-cyan-400 rounded-2xl border border-gray-700 shadow-xl">
+        <p className="font-bold tracking-widest uppercase text-xs">Kein Avatar ausgewählt</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full h-full relative" style={{ minHeight: '400px' }}>
-      <Canvas shadows camera={{ position: [0, 1.5, 4], fov: 45 }}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} />
-        <spotLight position={[-5, 5, -5]} intensity={0.5} color="cyan" />
-        <spotLight position={[5, 5, -5]} intensity={0.5} color="magenta" />
-        
-        <Environment preset="city" />
-        <OrbitControls enablePan={false} maxPolarAngle={Math.PI / 1.5} minDistance={2} maxDistance={10} />
-        
+    <div className="w-full h-full relative" style={{ minHeight: '300px' }}>
+      <Canvas camera={{ position: [0, 1.5, 3.5], fov: 45 }} shadows>
         <Suspense fallback={null}>
-            <AvatarModel url={props.modelUrl} {...props} />
+          {/* Beleuchtung für besseres Aussehen */}
+          <ambientLight intensity={0.6} />
+          <directionalLight position={[2, 5, 2]} intensity={1.5} castShadow shadow-mapSize={[1024, 1024]} />
+          <spotLight position={[-5, 5, -5]} intensity={0.5} color="cyan" />
+          <spotLight position={[5, 5, -5]} intensity={0.5} color="magenta" />
+          
+          <Environment preset="city" /> {/* Gibt dem Modell schöne Reflexionen */}
+          
+          {/* Das Modell laden */}
+          <Model url={modelUrl} danceState={danceState} intensity={intensity} bpm={bpm} />
+
+          {/* Ein kleiner weicher Schatten unter dem Charakter */}
+          <ContactShadows position={[0, -1, 0]} opacity={0.6} scale={10} blur={2} far={4} />
+
+          {/* Steuerung: Man kann den Avatar mit der Maus drehen, aber nicht wegscrollen */}
+          <OrbitControls 
+            enablePan={false} 
+            enableZoom={false} 
+            minPolarAngle={Math.PI / 2.5} 
+            maxPolarAngle={Math.PI / 2} 
+          />
         </Suspense>
-        
-        <ContactShadows position={[0, -1, 0]} opacity={0.6} scale={10} blur={2} far={4} />
       </Canvas>
-      {/* Hilfstext */}
-      {!props.modelUrl && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-white bg-black/50 px-4 py-2 rounded-xl">Keine Avatar-URL hinterlegt.</p>
-        </div>
-      )}
     </div>
   );
-}
+};
+
+export default PlayerAvatar;
