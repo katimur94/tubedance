@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Avatar } from './Avatar';
+import { Avatar3D } from './Avatar3D';
 import { motion } from 'motion/react';
 import { ArrowLeft, Star, Lock } from 'lucide-react';
 
@@ -45,19 +45,20 @@ export function LockerRoom({ profile, onSave, onBack }: LockerRoomProps) {
   return (
     <div className="w-full max-w-5xl mx-auto p-8 bg-gray-900/90 backdrop-blur-xl border border-gray-800 rounded-3xl shadow-2xl flex flex-col md:flex-row gap-8">
       {/* Left: Avatar & Level Info */}
-      <div className="flex flex-col items-center justify-center p-8 bg-gray-800/50 rounded-2xl border border-gray-700 md:w-1/3 relative shrink-0">
-        <button onClick={onBack} className="absolute top-4 left-4 p-2 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-colors flex items-center justify-center shadow-lg group">
+      <div className="flex flex-col items-center justify-center p-8 bg-black/50 rounded-2xl border border-gray-700 md:w-1/3 relative shrink-0 shadow-inner">
+        <button onClick={onBack} className="absolute top-4 left-4 p-2 bg-gray-800 hover:bg-cyan-600 text-white rounded-full transition-colors flex items-center justify-center shadow-lg group z-50">
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
         </button>
 
-        <h2 className="text-2xl font-black text-cyan-400 uppercase tracking-widest mb-6 border-b border-gray-700 w-full text-center pb-2">Locker Room</h2>
+        <h2 className="text-2xl font-black text-cyan-400 uppercase tracking-widest mb-6 border-b border-gray-700 w-full text-center pb-2 z-10">Locker Room</h2>
 
-        <div className="h-64 flex items-end justify-center mb-8">
-          <Avatar 
+        <div className="w-full h-64 flex items-center justify-center mb-8 border border-gray-800 rounded-2xl overflow-hidden bg-gray-900 shadow-2xl relative">
+          <Avatar3D 
             jacket={tempProfile.jacket} 
             pants={tempProfile.pants} 
             shoes={tempProfile.shoes} 
-            danceState="Perfect" 
+            danceState="dancing" 
+            intensity={1}
           />
         </div>
 
