@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Plus, Play, ListVideo, Search, Youtube, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-interface PlaylistSong {
+export interface PlaylistSong {
   id: string;
   playlist_id?: string;
   video_id: string;
@@ -12,7 +12,7 @@ interface PlaylistSong {
   position: number;
 }
 
-interface Playlist {
+export interface Playlist {
   id: string;
   title: string;
   is_preset: boolean;
@@ -20,7 +20,7 @@ interface Playlist {
   songs?: PlaylistSong[];
 }
 
-const LOCAL_PRESETS: Playlist[] = [
+export const LOCAL_PRESETS: Playlist[] = [
   {
     id: 'local_sehr_leicht', title: '🟢 Sehr Leicht (60-80 BPM)', is_preset: true, created_by: null,
     songs: [

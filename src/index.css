@@ -1,1 +1,48 @@
 @import "tailwindcss";
+
+/* ─── Audition Online Color Palette ─── */
+:root {
+  --audition-pink: #ff69b4;
+  --audition-purple: #9b59b6;
+  --audition-blue: #3498db;
+  --audition-gold: #f1c40f;
+  --audition-bg: #1a0a2e;
+  --audition-bg-light: #2d1b4e;
+}
+
+/* Override base background for Audition feel */
+body {
+  background: var(--audition-bg);
+}
+
+/* Animated disco floor for game backgrounds */
+@keyframes disco-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes ticker-scroll {
+  from { transform: translateX(100%); }
+  to { transform: translateX(-100%); }
+}
+
+.animate-disco {
+  animation: disco-pulse 2s ease-in-out infinite;
+}
+
+.animate-ticker {
+  animation: ticker-scroll 20s linear infinite;
+}
+
+/* Audition glow text */
+.text-glow-pink {
+  text-shadow: 0 0 20px rgba(255, 105, 180, 0.6), 0 0 40px rgba(255, 105, 180, 0.3);
+}
+
+.text-glow-gold {
+  text-shadow: 0 0 20px rgba(241, 196, 15, 0.6), 0 0 40px rgba(241, 196, 15, 0.3);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.6), 0 0 40px rgba(6, 182, 212, 0.3);
+}

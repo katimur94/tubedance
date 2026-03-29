@@ -11,36 +11,59 @@ export class SoundEngine {
     return this.ctx;
   }
 
-  playHit(type: 'perfect' | 'great' | 'good') {
+  /** Hit-Sound pro Bewertung */
+  playHit(type: 'perfect' | 'great' | 'good' | 'bad') {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
-    const freq = { perfect: 880, great: 660, good: 440 }[type];
-    const dur = { perfect: 0.15, great: 0.12, good: 0.1 }[type];
-    const vol = { perfect: 0.3, great: 0.25, good: 0.2 }[type];
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-    if (type === 'perfect') osc.frequency.exponentialRampToValueAtTime(1760, now + 0.05);
-    gain.gain.setValueAtTime(vol, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    osc.start(now);
-    osc.stop(now + dur);
-
-    if (type === 'perfect' || type === 'great') {
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(freq * 1.5, now);
-      gain2.gain.setValueAtTime(vol * 0.3, now);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + dur * 0.8);
-      osc2.start(now);
-      osc2.stop(now + dur);
+    if (type === 'perfect') {
+      // Chime: bright arpeggio
+      [880, 1100, 1320, 1760].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now + i * 0.04);
+        g.gain.setValueAtTime(0.25, now + i * 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.15);
+        o.start(now + i * 0.04);
+        o.stop(now + i * 0.04 + 0.15);
+      });
+    } else if (type === 'great') {
+      // Pling: two-tone
+      [660, 990].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now + i * 0.06);
+        g.gain.setValueAtTime(0.22, now + i * 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.12);
+        o.start(now + i * 0.06);
+        o.stop(now + i * 0.06 + 0.12);
+      });
+    } else if (type === 'good') {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(440, now);
+      g.gain.setValueAtTime(0.18, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      o.start(now);
+      o.stop(now + 0.1);
+    } else {
+      // Bad: dull thud
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(200, now);
+      o.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+      g.gain.setValueAtTime(0.15, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      o.start(now);
+      o.stop(now + 0.12);
     }
   }
 
@@ -49,8 +72,7 @@ export class SoundEngine {
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(150, now);
     osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
@@ -66,8 +88,7 @@ export class SoundEngine {
     [523, 659, 784, 1047].forEach((freq, i) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
-      o.connect(g);
-      g.connect(ctx.destination);
+      o.connect(g); g.connect(ctx.destination);
       o.type = 'sine';
       o.frequency.setValueAtTime(freq, now + i * 0.07);
       g.gain.setValueAtTime(0.2, now + i * 0.07);
@@ -77,13 +98,59 @@ export class SoundEngine {
     });
   }
 
+  /** Crowd Applaus (weißes Rauschen mit Modulation) */
+  playCrowdCheer(duration: number = 1.5) {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    const bufferSize = ctx.sampleRate * duration;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      // Shaped noise to sound like crowd
+      data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufferSize) * Math.PI);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.setValueAtTime(2000, now);
+    bandpass.Q.setValueAtTime(0.5, now);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.3);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    noise.connect(bandpass);
+    bandpass.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
+  /** Countdown Tick (3, 2, 1) */
+  playCountdownTick(number: number) {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    const freq = number > 0 ? 440 : 880; // GO! ist höher
+    const dur = number > 0 ? 0.15 : 0.3;
+
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = number > 0 ? 'sine' : 'square';
+    o.frequency.setValueAtTime(freq, now);
+    if (number === 0) o.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+    g.gain.setValueAtTime(0.35, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    o.start(now);
+    o.stop(now + dur);
+  }
+
   playTick() {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sine';
     osc.frequency.setValueAtTime(440, now);
     gain.gain.setValueAtTime(0.3, now);
@@ -93,18 +160,24 @@ export class SoundEngine {
   }
 
   playGo() {
+    this.playCountdownTick(0);
+  }
+
+  /** Level Up sound */
+  playLevelUp() {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now);
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-    osc.start(now);
-    osc.stop(now + 0.3);
+    [523, 659, 784, 1047, 1319].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, now + i * 0.1);
+      g.gain.setValueAtTime(0.25, now + i * 0.1);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.3);
+      o.start(now + i * 0.1);
+      o.stop(now + i * 0.1 + 0.3);
+    });
   }
 }
 
@@ -159,6 +232,93 @@ export class TapBPMDetector {
   reset() { this.taps = []; }
 }
 
+/**
+ * Auto-BPM-Detection via Web Audio API
+ * Analysiert Audio-Energie-Peaks um den BPM zu schätzen
+ */
+export class AutoBPMDetector {
+  private audioCtx: AudioContext | null = null;
+
+  async detectFromStream(stream: MediaStream, durationSec: number = 10): Promise<number | null> {
+    try {
+      this.audioCtx = new AudioContext();
+      const source = this.audioCtx.createMediaStreamSource(stream);
+      const analyser = this.audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const energyHistory: number[] = [];
+      const sampleRate = 60; // Samples per second
+
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          analyser.getByteFrequencyData(data);
+          // Focus on bass frequencies (first 10 bins)
+          let bassEnergy = 0;
+          for (let i = 0; i < 10; i++) bassEnergy += data[i];
+          energyHistory.push(bassEnergy);
+
+          if (energyHistory.length >= sampleRate * durationSec) {
+            clearInterval(interval);
+            resolve(this.estimateBPM(energyHistory, sampleRate));
+          }
+        }, 1000 / sampleRate);
+
+        // Timeout fallback
+        setTimeout(() => {
+          clearInterval(interval);
+          if (energyHistory.length > sampleRate * 2) {
+            resolve(this.estimateBPM(energyHistory, sampleRate));
+          } else {
+            resolve(null);
+          }
+        }, (durationSec + 2) * 1000);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private estimateBPM(energyHistory: number[], sampleRate: number): number {
+    // Einfache Peak-Detection: Finde die durchschnittliche Zeit zwischen Energie-Peaks
+    const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+    const threshold = avg * 1.3;
+
+    const peaks: number[] = [];
+    let lastPeak = -10;
+
+    for (let i = 1; i < energyHistory.length - 1; i++) {
+      if (energyHistory[i] > threshold &&
+          energyHistory[i] > energyHistory[i - 1] &&
+          energyHistory[i] > energyHistory[i + 1] &&
+          i - lastPeak > sampleRate * 0.2) {
+        peaks.push(i);
+        lastPeak = i;
+      }
+    }
+
+    if (peaks.length < 2) return 120; // Fallback
+
+    // Durchschnittliches Intervall zwischen Peaks
+    let totalInterval = 0;
+    for (let i = 1; i < peaks.length; i++) {
+      totalInterval += peaks[i] - peaks[i - 1];
+    }
+    const avgInterval = totalInterval / (peaks.length - 1);
+    const secondsPerBeat = avgInterval / sampleRate;
+    const bpm = Math.round(60 / secondsPerBeat);
+
+    // Clamp to reasonable range
+    return Math.max(60, Math.min(240, bpm));
+  }
+
+  destroy() {
+    this.audioCtx?.close();
+    this.audioCtx = null;
+  }
+}
+
 export class AudioAnalyzer {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -170,8 +330,6 @@ export class AudioAnalyzer {
   private lastTime = 0;
   private globalLast = 0;
   private _active = false;
-  // Freq bands: bass(20-150Hz), low-mid(150-500), mid(500-2k), high(2k-8k)
-  // bin ≈ 21.5Hz at 44100/2048
   private readonly B = [[1,7],[7,23],[23,93],[93,372]];
 
   async init(): Promise<boolean> {

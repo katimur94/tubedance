@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Users, Play, Copy, ArrowRight } from 'lucide-react';
+import { Users, Play, Copy, ArrowRight, Crown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MultiplayerLobbyProps {
@@ -13,15 +13,40 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
   const [roomCode, setRoomCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [isHost, setIsHost] = useState(false);
+  const [hostId, setHostId] = useState<string | null>(null);
   const [players, setPlayers] = useState<{ id: string, name: string }[]>([]);
   const [inRoom, setInRoom] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [crownNotice, setCrownNotice] = useState<string | null>(null);
+
+  const channelRef = useRef<any>(null);
+  // Refs to avoid stale closures inside Supabase realtime callbacks
+  const hostIdRef = useRef<string | null>(null);
+  const isHostRef = useRef(false);
+  const playersRef = useRef<{ id: string, name: string }[]>([]);
+
+  useEffect(() => { hostIdRef.current = hostId; }, [hostId]);
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { playersRef.current = players; }, [players]);
 
   // Leave room on unmount
   useEffect(() => {
     return () => {
       if (roomCode) {
-        supabase.removeAllChannels();
+        // If we're the last player, delete the room
+        if (playersRef.current.length <= 1) {
+          supabase.from('game_rooms').delete().eq('room_code', roomCode).then(() => {});
+        } else if (isHostRef.current) {
+          // Transfer crown before unmount
+          const next = playersRef.current.find(p => p.id !== userId);
+          if (next) {
+            supabase.from('game_rooms').update({ host_id: next.id }).eq('room_code', roomCode).then(() => {});
+          }
+        }
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
       }
     };
   }, [roomCode]);
@@ -44,7 +69,8 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
     if (!error) {
       setRoomCode(code);
       setIsHost(true);
-      joinRealtimeChannel(code);
+      setHostId(userId);
+      joinRealtimeChannel(code, true);
     } else {
       alert("Fehler beim Erstellen des Raums: " + error.message);
     }
@@ -73,8 +99,13 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
     setLoading(false);
   };
 
-  const joinRealtimeChannel = (code: string) => {
+  const joinRealtimeChannel = (code: string, asHost: boolean = false) => {
     setInRoom(true);
+    // Clean up any existing channels first
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
     const channel = supabase.channel(`room:${code}`, {
       config: {
         presence: {
@@ -92,6 +123,48 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
           activePlayers.push({ id: key, name: value[0].name });
         }
         setPlayers(activePlayers);
+
+        const currentHostId = hostIdRef.current;
+
+        // Auto-close: if no players remain, delete the room
+        if (activePlayers.length === 0) {
+          supabase.from('game_rooms').delete().eq('room_code', code).then(() => {});
+          return;
+        }
+
+        // Auto-promote: if the current host left, promote the first remaining player
+        if (activePlayers.length > 0) {
+          const hostStillHere = activePlayers.find((p: any) => p.id === currentHostId);
+          if (currentHostId && !hostStillHere) {
+            const newLeader = activePlayers[0];
+            setHostId(newLeader.id);
+            if (newLeader.id === userId) {
+              setIsHost(true);
+              setCrownNotice('Du bist jetzt der Leader! 👑');
+              setTimeout(() => setCrownNotice(null), 3000);
+              supabase.from('game_rooms').update({ host_id: userId }).eq('room_code', code).then(() => {});
+            } else {
+              setIsHost(false);
+              setCrownNotice(`${newLeader.name} ist jetzt der Leader!`);
+              setTimeout(() => setCrownNotice(null), 3000);
+            }
+          } else if (!currentHostId && !asHost) {
+            supabase.from('game_rooms').select('host_id').eq('room_code', code).single().then(({ data }) => {
+              if (data) {
+                const dbHostHere = activePlayers.find((p: any) => p.id === data.host_id);
+                if (dbHostHere) {
+                  setHostId(data.host_id);
+                  setIsHost(data.host_id === userId);
+                } else if (activePlayers.length > 0) {
+                  const newLeader = activePlayers[0];
+                  setHostId(newLeader.id);
+                  setIsHost(newLeader.id === userId);
+                  supabase.from('game_rooms').update({ host_id: newLeader.id }).eq('room_code', code).then(() => {});
+                }
+              }
+            });
+          }
+        }
       })
       .on('postgres_changes', { 
         event: 'UPDATE', 
@@ -106,8 +179,18 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({ name: username, online_at: new Date().toISOString() });
+          // Load host_id from DB on join
+          if (!asHost) {
+            const { data } = await supabase.from('game_rooms').select('host_id').eq('room_code', code).single();
+            if (data) {
+              setHostId(data.host_id);
+              setIsHost(data.host_id === userId);
+            }
+          }
         }
       });
+
+    channelRef.current = channel;
   };
 
   const startGame = async () => {

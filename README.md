@@ -1,79 +1,149 @@
-# 🕺 TubeDance
+# TubeDance - Audition Online
+
+> Web-basiertes Multiplayer-Rhythmusspiel inspiriert von Audition Online. Tanze im Battle gegen andere Spieler, sammle Beats, schalte Items frei und steige in der Rangliste auf.
 
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black&style=flat-square)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white&style=flat-square)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white&style=flat-square)](https://www.typescriptlang.org/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white&style=flat-square)](https://tailwindcss.com/)
+[![Three.js](https://img.shields.io/badge/Three.js-0.183-000000?logo=threedotjs&logoColor=white&style=flat-square)](https://threejs.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white&style=flat-square)](https://supabase.com/)
 
-**TubeDance** is a high-performance, web-based rhythm game that turns YouTube music into interactive dance-to-the-beat experiences. Built with modern web technologies, it offers a premium, industrial-themed interface and pixel-perfect synchronization.
-
----
-
-## ⚡ Features
-
-- **📺 YouTube Integration**: Jam to your favorite tracks directly from YouTube.
-- **🏗️ Industrial OS UI**: A sleek, dark, and futuristic interface with glassmorphism and subtle micro-animations.
-- **🎛️ Real-time Audio Analysis**: Precision-timed arrow spawns synced to the BPM and rhythm using Web Audio API.
-- **🎯 Advanced Mechanics**: Supports standard taps, hold-notes for sustained sounds, and complex beat patterns.
-- **📱 Responsive Design**: Fully optimized for desktop and mobile play.
-- **✨ Motion Powered**: Silky smooth 60fps animations powered by `motion`.
+**Live:** [https://tubedance.netlify.app](https://tubedance.netlify.app) <!-- Update with actual Netlify URL -->
 
 ---
 
-## 🛠️ Tech Stack
+## Features
 
-- **Framework**: [React 19](https://react.dev/)
-- **Build Tool**: [Vite 6](https://vitejs.dev/)
-- **Styling**: [TailwindCSS 4](https://tailwindcss.com/)
-- **Animations**: [Motion](https://motion.dev/)
-- **Icons**: [Lucide React](https://lucide.dev/)
-- **Video/Audio**: [React YouTube](https://github.com/tjallingt/react-youtube)
+### Gameplay
+- **Beat Up Mode** - Klassischer Audition-Modus: Pfeile merken, eingeben, im Takt bestaetigen
+- **Beat Rush Mode** - DDR/StepMania-Stil mit fallenden Pfeilen
+- **Freestyle Mode** - Freie Kombos mit Jury-Bewertung
+- **50+ Songs** in 5 Schwierigkeitsstufen (60-200+ BPM)
+
+### Multiplayer
+- Echtzeit-PvP Battle mit Live-Avataren auf der Buehne
+- Raum-Browser mit Quick Join und Raum-Code
+- Leader-System (Krone weitergeben, Spieler kicken, Raum schliessen)
+- Song/Playlist-Auswahl durch den Leader
+- Synchronisierter Countdown und Spielstart
+- Hit-Ratings (Perfect/Great/Cool/Bad/Miss) live sichtbar fuer alle
+- Echtzeit-Chat mit Emotes
+
+### 3D Avatare
+- Prozeduraler 3D-Avatar mit Skelett-Animation (Three.js / React Three Fiber)
+- 50+ Kleidungsstuecke und Effekte (Jacken, Schuhe, Fluegel, Auren, ...)
+- Ready Player Me Integration fuer eigene Avatare
+- Rarity-System: Common, Rare, Epic, Legendary
+- Super Saiyajin Aura mit SSJ-Frisur und Blitz-Effekten (Admin-exklusiv)
+
+### Wirtschaft & Fortschritt
+- **Beats** (Waehrung) verdient durch Gameplay
+- Fashion Shop mit Live-3D-Vorschau
+- Daily Rewards mit Streak-System
+- Level-System mit EXP
+- 10 Achievements mit Fortschrittsbalken
+- Globale Rangliste (Top 100)
+- Alles serverseitig in Supabase gespeichert (kein localStorage-Verlust)
+
+### Rollen
+- User, Supporter, Moderator, Gamemaster, Admin
+- Admins: Alle Items freigeschaltet, unendlich Beats, Level 999, SSJ-Aura
 
 ---
 
-## 🚀 Getting Started
+## Tech-Stack
 
-### Prerequisites
+| Bereich | Technologie |
+|---------|-------------|
+| Frontend | React 19, TypeScript, Vite 6 |
+| 3D | Three.js 0.183, @react-three/fiber 9, @react-three/drei 10 |
+| Backend | Supabase (Auth, PostgreSQL, Realtime, Storage) |
+| Styling | Tailwind CSS 4 |
+| Animation | Motion (framer-motion Nachfolger) |
+| Audio | YouTube (react-youtube) + Web Audio API |
+| Avatare | Ready Player Me + Procedural 3D Fallback |
+| Deployment | Netlify |
 
-- [Node.js](https://nodejs.org/) (Latest LTS recommended)
-- [npm](https://www.npmjs.com/)
+---
+
+## Setup
+
+### Voraussetzungen
+- Node.js 18+
+- Supabase-Projekt ([supabase.com](https://supabase.com))
 
 ### Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/katimur94/tubedance.git
-   cd tubedance
-   ```
+```bash
+git clone https://github.com/katimur94/tubedance.git
+cd tubedance
+npm install
+```
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+### Environment Variables
 
-3. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
+Erstelle `.env` im Root:
 
-4. **Open your browser:**
-   Navigate to `http://localhost:3000` to start dancing!
+```env
+VITE_SUPABASE_URL=https://dein-projekt.supabase.co
+VITE_SUPABASE_ANON_KEY=dein-anon-key
+```
+
+### Datenbank
+
+```bash
+# Option A: Supabase CLI
+supabase db push
+
+# Option B: Supabase Dashboard -> SQL Editor
+# Inhalt von supabase/migrations/001_economy_and_social.sql einfuegen und ausfuehren
+```
+
+### Entwicklung
+
+```bash
+npm run dev        # Dev-Server (http://localhost:5173)
+npm run build      # Production Build
+npx tsc --noEmit   # Type-Check
+```
 
 ---
 
-## 🎨 Theme & Aesthetic
+## Projektstruktur
 
-TubeDance uses a **"High-Tech Industrial"** theme. The UI is designed to feel like a control terminal from a futuristic facility, featuring:
-- Deep charcoal and neon cyan color palette.
-- Grid-based layouts and monospaced typography.
-- CSS Backdrop filters for a premium glass effect.
+```
+src/
+├── App.tsx                     # Haupt-App mit View-Router
+├── types/gameTypes.ts          # GameMode, HitRating, LetterGrade
+├── lib/
+│   ├── supabase.ts             # Supabase Client
+│   ├── economy.ts              # Wallet, Shop (50+ Items), Supabase-Sync
+│   └── roles.ts                # Rollen-System (User bis Admin)
+├── components/
+│   ├── Game.tsx                # Game Controller + Multiplayer Battle-Stage
+│   ├── RoomBrowser.tsx         # Multiplayer Lobby + Raum-Management
+│   ├── AnimatedAvatar.tsx      # 3D Avatar mit Skelett-Animation + SSJ-Aura
+│   ├── FashionShop.tsx         # Item-Shop mit Live-3D-Preview
+│   ├── PlayerProfile.tsx       # Profil, Stats, Achievements mit Fortschritt
+│   ├── Leaderboard.tsx         # Top 100 Rangliste
+│   ├── Chat.tsx                # Echtzeit-Chat (Supabase Broadcast)
+│   ├── DailyRewards.tsx        # 7-Tage Belohnungszyklus
+│   └── modes/
+│       ├── BeatUpMode.tsx      # Klassischer Audition-Modus + Finish Move
+│       ├── BeatRushMode.tsx    # DDR-Stil (fallende Pfeile)
+│       └── FreestyleMode.tsx   # Freestyle mit Beat-Timing
+supabase/
+└── migrations/
+    └── 001_economy_and_social.sql
+```
 
 ---
 
-## 👩‍💻 Contributing
+## Screenshots
 
-Found a bug or have a suggestion? Feel free to open an [issue](https://github.com/katimur94/tubedance/issues) or submit a pull request!
+*Coming soon*
 
 ---
 
-<p align="center">Made with ❤️ for the Rhythm Game Community</p>
+<p align="center">Made for the Rhythm Game Community</p>
