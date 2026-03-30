@@ -58,6 +58,8 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
   const nextIdRef = useRef(0);
   const spawnTimerRef = useRef<number | null>(null);
   const arrowsRef = useRef<FallingArrow[]>([]);
+  const hitIdsRef = useRef<Set<number>>(new Set());
+  const feedbackTimerRef = useRef<number | null>(null);
 
   // Keep ref in sync
   useEffect(() => {
@@ -100,25 +102,34 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
   }, [bpm, isPlaying]);
 
   // Clean up old arrows (missed or hit)
+  const missedCountRef = useRef(0);
   useEffect(() => {
     const cleanup = setInterval(() => {
       const now = performance.now();
+      missedCountRef.current = 0;
+
       setArrows(prev => {
         const kept: FallingArrow[] = [];
         for (const arrow of prev) {
-          if (arrow.hit) {
-            // Remove hit arrows after animation
-            if (now - arrow.targetTime > 500) continue;
+          if (arrow.hit || hitIdsRef.current.has(arrow.id)) {
+            if (now - arrow.targetTime > 500) {
+              hitIdsRef.current.delete(arrow.id);
+              continue;
+            }
             kept.push(arrow);
           } else if (now - arrow.targetTime > TIMING.Bad + 50) {
-            // Missed
-            onMiss();
+            missedCountRef.current++;
           } else {
             kept.push(arrow);
           }
         }
         return kept;
       });
+
+      // Call onMiss outside of setState to avoid "setState during render"
+      for (let i = 0; i < missedCountRef.current; i++) {
+        onMiss();
+      }
     }, 100);
 
     return () => clearInterval(cleanup);
@@ -151,7 +162,8 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
       else if (diff <= TIMING.Bad) rating = 'Bad';
       else return; // Too far, ignore
 
-      // Mark as hit
+      // Mark as hit synchronously in ref to prevent race with cleanup
+      hitIdsRef.current.add(closest.id);
       setArrows(prev =>
         prev.map(a => (a.id === closest.id ? { ...a, hit: true, rating } : a))
       );
@@ -160,12 +172,14 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
       onHit(rating, points);
 
       setFeedback({ col: colIndex, rating, id: closest.id });
-      setTimeout(() => setFeedback(null), 500);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = window.setTimeout(() => setFeedback(null), 500);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const colIndex = COLUMNS.findIndex(c => c.key === e.key);
       if (colIndex === -1) return;
+      e.preventDefault();
       setPressedColumns(prev => {
         const next = new Set(prev);
         next.delete(colIndex);
@@ -178,6 +192,7 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
   }, [onHit]);
 

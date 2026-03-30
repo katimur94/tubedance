@@ -7,15 +7,22 @@ if (!supabaseUrl || !supabaseKey) {
   console.warn('Supabase URL or Key is missing. Check your .env setup.');
 }
 
-// Custom fetch with timeout — respects existing signals, adds 10s fallback
-const fetchWithTimeout: typeof fetch = (input, init) => {
-  // If caller already has a signal, don't override it
-  if (init?.signal) return fetch(input, init);
-
+// Custom fetch with timeout — combines existing signals with our 10s fallback
+const fetchWithTimeout: typeof fetch = async (input, init) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  return fetch(input, { ...init, signal: controller.signal })
-    .finally(() => clearTimeout(timeout));
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  // If caller already has a signal, forward its abort to our controller
+  if (init?.signal) {
+    init.signal.addEventListener('abort', () => controller.abort());
+  }
+
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {

@@ -19,17 +19,25 @@ export function WalletView({ onBack, onOpenShop }: WalletViewProps) {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [ownedCount, setOwnedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<'overview' | 'history'>('overview');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setWallet(getLocalWallet());
     setTransactions(getTransactions());
     setOwnedCount(getOwnedItems().length);
+    setLoading(false);
   }, []);
 
   const recentTx = transactions.slice(0, 20);
 
-  // Stats
-  const earningsRate = wallet.totalEarned > 0 ? Math.floor(wallet.totalEarned / Math.max(1, Math.floor((Date.now() - (transactions.at(-1)?.timestamp || Date.now())) / (1000 * 60 * 60)))) : 0;
+  // Stats — defensive: avoid NaN / Infinity when no transactions exist or timestamps are invalid
+  const oldestTimestamp = transactions.length > 0 ? transactions.at(-1)?.timestamp : undefined;
+  const hoursSinceFirst = oldestTimestamp && Number.isFinite(oldestTimestamp)
+    ? Math.max(1, Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60)))
+    : 1;
+  const earningsRate = wallet.totalEarned > 0 && Number.isFinite(wallet.totalEarned)
+    ? Math.floor(wallet.totalEarned / hoursSinceFirst)
+    : 0;
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col z-50 overflow-hidden font-sans text-white">
@@ -89,6 +97,12 @@ export function WalletView({ onBack, onOpenShop }: WalletViewProps) {
 
       {/* Content */}
       <div className="relative z-10 flex-1 overflow-y-auto px-8 py-6">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-10 h-10 border-4 border-yellow-500/30 border-t-yellow-400 rounded-full animate-spin mb-4" />
+            <p className="text-gray-500 font-bold uppercase tracking-wider text-sm">Lade Wallet-Daten...</p>
+          </div>
+        ) : (
         <AnimatePresence mode="wait">
           {activeTab === 'overview' ? (
             <motion.div key="overview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -223,6 +237,7 @@ export function WalletView({ onBack, onOpenShop }: WalletViewProps) {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </div>
     </div>
   );

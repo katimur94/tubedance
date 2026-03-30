@@ -20,6 +20,8 @@ interface GameProps {
   userId?: string;
   username?: string;
   profile: PlayerProfile;
+  liveJoin?: boolean;
+  gameStartedAt?: number; // Timestamp when the room started playing — used for live sync
   onBack: () => void;
   onGameEnd: (exp: number, finalScore?: number, maxCombo?: number, multiplier?: number, songCount?: number) => void;
 }
@@ -36,15 +38,64 @@ interface PlayerScore {
   lastRatingTime?: number;
 }
 
-export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, userId, username, profile, onBack, onGameEnd }: GameProps) {
+// Persist and restore score for a room across leave/rejoin
+const SCORE_STORAGE_KEY = 'tubedance_room_score_';
+function saveRoomScore(roomCode: string, data: { score: number; combo: number; maxCombo: number; multiplier: number; hitCounts: Record<string, number>; round: number }) {
+  try { sessionStorage.setItem(SCORE_STORAGE_KEY + roomCode, JSON.stringify(data)); } catch {}
+}
+function loadRoomScore(roomCode: string) {
+  try {
+    const saved = sessionStorage.getItem(SCORE_STORAGE_KEY + roomCode);
+    return saved ? JSON.parse(saved) : null;
+  } catch { return null; }
+}
+function clearRoomScore(roomCode: string) {
+  try { sessionStorage.removeItem(SCORE_STORAGE_KEY + roomCode); } catch {}
+}
+
+export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up', roomCode, userId, username, profile, liveJoin = false, gameStartedAt = 0, onBack, onGameEnd }: GameProps) {
+  // Restore score from previous session in this room (live rejoin)
+  const savedScore = liveJoin && roomCode ? loadRoomScore(roomCode) : null;
+
+  const [validatedPlaylist, setValidatedPlaylist] = useState<PlaylistSong[]>(rawPlaylist);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [gamePhase, setGamePhase] = useState<'ready' | 'playing' | 'song_ended' | 'gameover'>('ready');
-  const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(0);
-  const [multiplier, setMultiplier] = useState(1);
-  const [maxCombo, setMaxCombo] = useState(0);
+
+  // Validate YouTube videos on mount — filter out broken links
+  useEffect(() => {
+    let cancelled = false;
+    const validate = async () => {
+      const valid: PlaylistSong[] = [];
+      for (const song of rawPlaylist) {
+        // Skip songs with empty or missing video IDs
+        if (!song.video_id || song.video_id.length < 5) continue;
+        try {
+          // Use noembed.com to avoid CORS issues and noisy 404 console errors
+          const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${song.video_id}`);
+          if (cancelled) return;
+          if (res.ok) {
+            const data = await res.json();
+            // noembed returns { error: "..." } for invalid videos
+            if (!data.error) valid.push(song);
+          }
+        } catch {
+          // Network error — assume video is valid to avoid false negatives
+          if (!cancelled) valid.push(song);
+        }
+      }
+      if (!cancelled) {
+        setValidatedPlaylist(valid.length > 0 ? valid : rawPlaylist);
+      }
+    };
+    validate();
+    return () => { cancelled = true; };
+  }, [rawPlaylist]);
+  const [score, setScore] = useState(savedScore?.score || 0);
+  const [combo, setCombo] = useState(savedScore?.combo || 0);
+  const [multiplier, setMultiplier] = useState(savedScore?.multiplier || 1);
+  const [maxCombo, setMaxCombo] = useState(savedScore?.maxCombo || 0);
   const [leaderboard, setLeaderboard] = useState<PlayerScore[]>([]);
-  const [round, setRound] = useState(0);
+  const [round, setRound] = useState(savedScore?.round || 0);
 
   // 3D Avatar state
   const [avatarDance, setAvatarDance] = useState<'idle' | 'dancing' | 'miss'>('idle');
@@ -52,14 +103,47 @@ export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, u
   const [countdown, setCountdown] = useState<number | null>(null);
 
   // Hit rating stats
-  const [hitCounts, setHitCounts] = useState<Record<HitRating, number>>({ Perfect: 0, Great: 0, Cool: 0, Bad: 0, Miss: 0 });
+  const [hitCounts, setHitCounts] = useState<Record<HitRating, number>>(savedScore?.hitCounts || { Perfect: 0, Great: 0, Cool: 0, Bad: 0, Miss: 0 });
   const [currentGrade, setCurrentGrade] = useState<LetterGrade>('C');
   const [lastRating, setLastRating] = useState<HitRating | null>(null);
   const lastRatingTimer = useRef<any>(null);
 
   const playerRef = useRef<any>(null);
   const channelRef = useRef<any>(null);
+  const videoIntervalRef = useRef<any>(null);
+  const scoreBroadcastTimer = useRef<any>(null);
+  const gamePhaseRef = useRef(gamePhase);
+  useEffect(() => { gamePhaseRef.current = gamePhase; }, [gamePhase]);
 
+  // Refs for current state (used in broadcast handlers to avoid stale closures)
+  const scoreRef = useRef(savedScore?.score || 0);
+  const comboRef = useRef(savedScore?.combo || 0);
+  const avatarDanceRef = useRef<'idle' | 'dancing' | 'miss'>('idle');
+  const intensityRef = useRef(1);
+  const lastRatingRef = useRef<HitRating | null>(null);
+
+  // Keep refs in sync for broadcast handlers
+  useEffect(() => { scoreRef.current = score; }, [score]);
+  useEffect(() => { comboRef.current = combo; }, [combo]);
+  useEffect(() => { avatarDanceRef.current = avatarDance; }, [avatarDance]);
+  useEffect(() => { intensityRef.current = intensity; }, [intensity]);
+  useEffect(() => { lastRatingRef.current = lastRating; }, [lastRating]);
+
+  // Save score to sessionStorage on every update (so it persists across leave/rejoin)
+  useEffect(() => {
+    if (mode === 'audition' && roomCode && gamePhase === 'playing') {
+      saveRoomScore(roomCode, { score, combo, maxCombo, multiplier, hitCounts, round });
+    }
+  }, [score, combo, maxCombo, multiplier, hitCounts, round, gamePhase, mode, roomCode]);
+
+  // Clear saved score when game ends normally (not mid-game leave)
+  useEffect(() => {
+    if (roomCode && (gamePhase === 'gameover' || gamePhase === 'song_ended')) {
+      clearRoomScore(roomCode);
+    }
+  }, [gamePhase, roomCode]);
+
+  const playlist = validatedPlaylist;
   const currentSong = playlist[currentSongIndex];
   const nextSong = playlist[currentSongIndex + 1];
 
@@ -78,30 +162,63 @@ export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, u
         });
       });
 
-      channel.subscribe();
+      // When someone joins, they request all players to re-announce themselves
+      channel.on('broadcast', { event: 'player_announce_request' }, () => {
+        // Re-broadcast our current state so the new player sees us
+        channel.send({
+          type: 'broadcast', event: 'score_update',
+          payload: {
+            userId, username, profile,
+            score: scoreRef.current,
+            combo: comboRef.current,
+            danceState: avatarDanceRef.current,
+            intensity: intensityRef.current,
+            lastRating: lastRatingRef.current,
+            lastRatingTime: Date.now(),
+          },
+        });
+      });
+
+      channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Announce ourselves (with restored score if rejoining) and request others to announce
+          channel.send({
+            type: 'broadcast', event: 'score_update',
+            payload: { userId, username, score: scoreRef.current, combo: comboRef.current, profile, danceState: 'idle', intensity: 1, lastRating: null, lastRatingTime: Date.now() },
+          });
+          // Ask existing players to re-announce themselves
+          channel.send({
+            type: 'broadcast', event: 'player_announce_request', payload: {},
+          });
+        }
+      });
       channelRef.current = channel;
-      setLeaderboard([{ userId, username, score: 0, combo: 0, profile, danceState: 'idle', intensity: 1, lastRating: null, lastRatingTime: 0 }]);
+      setLeaderboard([{ userId, username, score: savedScore?.score || 0, combo: savedScore?.combo || 0, profile, danceState: 'idle', intensity: 1, lastRating: null, lastRatingTime: 0 }]);
 
       return () => { supabase.removeChannel(channel); };
     }
   }, [mode, roomCode, userId, username]);
 
-  // Broadcast score/dance updates
+  // Broadcast score/dance updates (debounced)
   useEffect(() => {
     if (channelRef.current && userId && username) {
-      channelRef.current.send({
-        type: 'broadcast', event: 'score_update',
-        payload: { userId, username, score, combo, profile, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() }
-      });
-      setLeaderboard(prev => prev.map(p => p.userId === userId ? { ...p, score, combo, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() } : p).sort((a, b) => b.score - a.score));
+      clearTimeout(scoreBroadcastTimer.current);
+      scoreBroadcastTimer.current = setTimeout(() => {
+        channelRef.current?.send({
+          type: 'broadcast', event: 'score_update',
+          payload: { userId, username, score, combo, profile, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() }
+        });
+        setLeaderboard(prev => prev.map(p => p.userId === userId ? { ...p, score, combo, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() } : p).sort((a, b) => b.score - a.score));
+      }, 100);
     }
+    return () => clearTimeout(scoreBroadcastTimer.current);
   }, [score, avatarDance, intensity, combo, lastRating, userId, username]);
 
-  // Handle Video Timeout
+  // Handle Video Timeout + broadcast current position for live joiners
   useEffect(() => {
-    let interval: any;
+    clearInterval(videoIntervalRef.current);
     if (gamePhase === 'playing') {
-      interval = setInterval(() => {
+      videoIntervalRef.current = setInterval(() => {
         if (playerRef.current?.getCurrentTime && playerRef.current?.getDuration) {
           const duration = playerRef.current.getDuration();
           const currentTime = playerRef.current.getCurrentTime();
@@ -109,47 +226,58 @@ export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, u
             setGamePhase('song_ended');
             try { playerRef.current.pauseVideo(); } catch (e) { }
           }
+          // Broadcast position for live joiners (every 3 seconds)
+          if (mode === 'audition' && channelRef.current && Math.round(currentTime) % 3 === 0) {
+            channelRef.current.send({
+              type: 'broadcast', event: 'song_position',
+              payload: {
+                currentTime: Math.floor(currentTime),
+                duration: Math.floor(duration),
+                songTitle: currentSong?.title,
+                videoId: currentSong?.video_id,
+                bpm: currentSong?.bpm,
+                startedAt: gameStartedAt,
+              },
+            });
+          }
         }
       }, 500);
     }
-    return () => clearInterval(interval);
+    return () => clearInterval(videoIntervalRef.current);
   }, [gamePhase]);
 
-  // Auto-start countdown in multiplayer — synchronized via broadcast
+  // Auto-start countdown in multiplayer — immediate and synchronized
   const syncStartHandled = useRef(false);
   useEffect(() => {
     if (mode === 'audition' && gamePhase === 'ready' && countdown === null && !syncStartHandled.current) {
       syncStartHandled.current = true;
 
+      if (liveJoin) {
+        // Live join — skip countdown, start playing immediately
+        // YouTube onReady will auto-play when it sees gamePhaseRef === 'playing'
+        setGamePhase('playing');
+        setAvatarDance('dancing');
+        return;
+      }
+
+      // Normal start — countdown for all players
+      setCountdown(3);
+      setAvatarDance('dancing');
+
+      // Broadcast sync signal so late-joining players also start
       if (channelRef.current) {
-        // Listen for sync_countdown from another player
         channelRef.current.on('broadcast', { event: 'sync_countdown' }, () => {
           if (countdown === null && gamePhase === 'ready') {
             setCountdown(3);
             setAvatarDance('dancing');
           }
         });
-
-        // First player to arrive broadcasts the sync signal after a short delay
-        const timer = setTimeout(() => {
-          channelRef.current?.send({
-            type: 'broadcast', event: 'sync_countdown', payload: {},
-          });
-          // Also start locally
-          setCountdown(3);
-          setAvatarDance('dancing');
-        }, 2000);
-        return () => clearTimeout(timer);
-      } else {
-        // No channel (fallback) — just start after delay
-        const timer = setTimeout(() => {
-          setCountdown(3);
-          setAvatarDance('dancing');
-        }, 1000);
-        return () => clearTimeout(timer);
+        channelRef.current.send({
+          type: 'broadcast', event: 'sync_countdown', payload: {},
+        });
       }
     }
-  }, [mode, gamePhase, countdown]);
+  }, [mode, gamePhase, countdown, liveJoin]);
 
   // Countdown Logic
   useEffect(() => {
@@ -269,8 +397,34 @@ export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, u
           <YouTube
             videoId={currentSong.video_id}
             opts={{ width: '100%', height: '100%', playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, showinfo: 0, start: 10 } }}
-            onReady={(e) => { playerRef.current = e.target; if (gamePhase === 'playing') e.target.playVideo(); else e.target.pauseVideo(); e.target.setVolume(100); }}
-            onStateChange={e => { if (e.data === 0) setGamePhase('song_ended'); }}
+            onReady={(e) => {
+              playerRef.current = e.target;
+              e.target.setVolume(100);
+              if (gamePhaseRef.current === 'playing') {
+                e.target.playVideo();
+                // Sync to room timeline — seek to where the song should be right now
+                // start:10 offset is baked into the playerVars, so add 10 to elapsed
+                if (gameStartedAt > 0) {
+                  const seekToSec = 10 + (Date.now() - gameStartedAt) / 1000;
+                  try { e.target.seekTo(seekToSec, true); } catch {}
+                }
+              } else {
+                e.target.pauseVideo();
+              }
+            }}
+            onStateChange={e => {
+              if (e.data === 0) setGamePhase('song_ended');
+              // YT.PlayerState.PLAYING = 1 — re-sync after buffering
+              if (e.data === 1 && gameStartedAt > 0 && gamePhaseRef.current === 'playing') {
+                const expectedSec = 10 + (Date.now() - gameStartedAt) / 1000;
+                const actualSec = e.target.getCurrentTime();
+                const drift = Math.abs(expectedSec - actualSec);
+                // Correct if drift > 2 seconds (only once to avoid loop)
+                if (drift > 2) {
+                  try { e.target.seekTo(expectedSec, true); } catch {}
+                }
+              }
+            }}
             onError={() => {
               // Skip to next song silently instead of aborting the game
               if (currentSongIndex + 1 < playlist.length) {
@@ -498,13 +652,15 @@ export default function Game({ playlist, mode, gameMode = 'beat_up', roomCode, u
               </span>
             </div>
 
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => { setCountdown(3); setAvatarDance('dancing'); }}
-              className="px-20 py-6 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 hover:from-pink-400 hover:via-purple-400 hover:to-cyan-400 text-white rounded-full font-black text-2xl tracking-[0.3em] uppercase shadow-[0_0_50px_rgba(236,72,153,0.4)] relative overflow-hidden">
-              <span className="relative z-10">STARTEN</span>
-              <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            </motion.button>
+            {mode !== 'audition' && (
+              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                onClick={() => { setCountdown(3); setAvatarDance('dancing'); }}
+                className="px-20 py-6 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 hover:from-pink-400 hover:via-purple-400 hover:to-cyan-400 text-white rounded-full font-black text-2xl tracking-[0.3em] uppercase shadow-[0_0_50px_rgba(236,72,153,0.4)] relative overflow-hidden">
+                <span className="relative z-10">STARTEN</span>
+                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              </motion.button>
+            )}
           </motion.div>
         </motion.div>
       )}

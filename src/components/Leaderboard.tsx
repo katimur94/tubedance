@@ -2,7 +2,7 @@
  * Leaderboard — Globale Rangliste
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Trophy, Crown, Medal, Flame, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -31,29 +31,72 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [myRank, setMyRank] = useState<number | null>(null);
+
+  // Request counter to prevent race conditions when rapidly switching filters
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     loadLeaderboard();
   }, [timeFilter]);
 
+  const getDateThreshold = (filter: TimeFilter): string | null => {
+    if (filter === 'all') return null;
+    const now = new Date();
+    if (filter === 'weekly') {
+      now.setDate(now.getDate() - 7);
+    } else if (filter === 'monthly') {
+      now.setDate(now.getDate() - 30);
+    }
+    return now.toISOString();
+  };
+
   const loadLeaderboard = async () => {
     setLoading(true);
+    setError(null);
+
+    const currentRequestId = ++requestIdRef.current;
+    const dateThreshold = getDateThreshold(timeFilter);
 
     // Try with JOIN first, fallback to separate queries if it fails
-    let { data, error } = await supabase
+    let query = supabase
       .from('leaderboard')
-      .select('user_id, username, total_score, total_games, highest_combo, win_count')
+      .select('user_id, username, total_score, total_games, highest_combo, win_count, updated_at')
       .order('total_score', { ascending: false })
       .limit(100);
 
-    if (error || !data || data.length === 0) {
+    if (dateThreshold) {
+      query = query.gt('updated_at', dateThreshold);
+    }
+
+    let { data, error: fetchError } = await query;
+
+    // Stale request — discard results
+    if (currentRequestId !== requestIdRef.current) return;
+
+    if (fetchError || !data || data.length === 0) {
       // Fallback: load from profiles directly (leaderboard table might not exist)
-      const { data: profileData } = await supabase
+      let profileQuery = supabase
         .from('profiles')
-        .select('id, username, level, role, total_games, highest_combo, win_count')
+        .select('id, username, level, role, total_games, highest_combo, win_count, updated_at')
         .order('highest_combo', { ascending: false })
         .limit(100);
+
+      if (dateThreshold) {
+        profileQuery = profileQuery.gt('updated_at', dateThreshold);
+      }
+
+      const { data: profileData, error: profileError } = await profileQuery;
+
+      // Stale request — discard results
+      if (currentRequestId !== requestIdRef.current) return;
+
+      if (profileError) {
+        setError('Rangliste konnte nicht geladen werden. Bitte versuche es erneut.');
+        setLoading(false);
+        return;
+      }
 
       if (profileData) {
         const mapped = profileData
@@ -81,6 +124,9 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
         .from('profiles')
         .select('id, username, level, role')
         .in('id', userIds);
+
+      // Stale request — discard results
+      if (currentRequestId !== requestIdRef.current) return;
 
       const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
@@ -178,6 +224,11 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
           <div className="text-center py-20">
             <div className="w-10 h-10 border-4 border-purple-700 border-t-pink-500 rounded-full animate-spin mx-auto mb-4" />
             <p className="text-purple-400 font-bold">Lade Rangliste...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-20">
+            <Trophy size={48} className="text-red-700 mx-auto mb-4" />
+            <p className="text-red-400 font-bold uppercase tracking-wider">{error}</p>
           </div>
         ) : entries.length === 0 ? (
           <div className="text-center py-20">

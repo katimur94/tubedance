@@ -171,7 +171,7 @@ export function saveLocalWallet(wallet: WalletState) {
       diamonds: wallet.diamonds,
       total_earned: wallet.totalEarned,
       total_spent: wallet.totalSpent,
-    }).eq('id', _cachedUserId).then(() => {}, () => {});
+    }).eq('id', _cachedUserId).then(() => {}, (err) => console.warn('[Economy] sync error:', err?.message || err));
   }
 }
 
@@ -184,7 +184,7 @@ export function saveOwnedItems(items: OwnedItem[]) {
   localStorage.setItem(OWNED_KEY, JSON.stringify(items));
   // Immediately persist to Supabase
   if (_cachedUserId) {
-    supabase.from('profiles').update({ owned_items: JSON.stringify(items) }).eq('id', _cachedUserId).then(() => {}, () => {});
+    supabase.from('profiles').update({ owned_items: JSON.stringify(items) }).eq('id', _cachedUserId).then(() => {}, (err) => console.warn('[Economy] sync error:', err?.message || err));
   }
 }
 
@@ -201,7 +201,7 @@ export function addTransaction(tx: Omit<TransactionRecord, 'id' | 'timestamp'>) 
   localStorage.setItem(TX_KEY, JSON.stringify(txs));
   // Immediately persist to Supabase
   if (_cachedUserId) {
-    supabase.from('profiles').update({ transactions_json: JSON.stringify(txs) }).eq('id', _cachedUserId).then(() => {}, () => {});
+    supabase.from('profiles').update({ transactions_json: JSON.stringify(txs) }).eq('id', _cachedUserId).then(() => {}, (err) => console.warn('[Economy] sync error:', err?.message || err));
   }
 }
 
@@ -283,7 +283,7 @@ export async function syncWalletToSupabase(userId: string) {
         mergedOwnedStr = JSON.stringify(merged);
         // Also update local
         saveOwnedItems(merged);
-      } catch(e) {}
+      } catch(e) { console.warn('[Economy] Failed to parse server owned_items:', e); }
     }
 
     // Update local with merged values
@@ -302,10 +302,12 @@ export async function syncWalletToSupabase(userId: string) {
     // Try syncing optional columns (may not exist if migration 002 wasn't run)
     const txs = getTransactions();
     const dailyState = localStorage.getItem('tubedance_daily_login');
+    let dailyJson = null;
+    try { if (dailyState) dailyJson = JSON.parse(dailyState); } catch { /* ignore */ }
     await supabase.from('profiles').update({
       transactions_json: JSON.stringify(txs),
-      daily_login_json: dailyState || null,
-    }).eq('id', userId).then(() => {}, () => {});
+      daily_login_json: dailyJson,
+    }).eq('id', userId).then(() => {}, (err) => console.warn('[Economy] sync error:', err?.message || err));
   } catch(e) {
     console.warn('Wallet sync failed', e);
   }
@@ -327,17 +329,20 @@ export async function loadWalletFromSupabase(userId: string): Promise<boolean> {
         totalSpent: data.total_spent || 0,
       });
       if (data.owned_items) {
-        try { saveOwnedItems(JSON.parse(data.owned_items)); } catch(e) {}
+        try { saveOwnedItems(JSON.parse(data.owned_items)); } catch(e) { console.warn('[Economy] Failed to parse owned_items:', e); }
       }
 
       // Try loading optional columns (may not exist)
       const { data: extra } = await supabase.from('profiles').select('transactions_json, daily_login_json').eq('id', userId).single();
       if (extra) {
         if (extra.transactions_json) {
-          try { localStorage.setItem(TX_KEY, extra.transactions_json); } catch(e) {}
+          try { localStorage.setItem(TX_KEY, extra.transactions_json); } catch(e) { console.warn('[Economy] Failed to store transactions:', e); }
         }
         if (extra.daily_login_json) {
-          try { localStorage.setItem('tubedance_daily_login', extra.daily_login_json); } catch(e) {}
+          try {
+            const dailyStr = typeof extra.daily_login_json === 'string' ? extra.daily_login_json : JSON.stringify(extra.daily_login_json);
+            localStorage.setItem('tubedance_daily_login', dailyStr);
+          } catch(e) { console.warn('[Economy] Failed to store daily login:', e); }
         }
       }
       return true;
@@ -346,7 +351,7 @@ export async function loadWalletFromSupabase(userId: string): Promise<boolean> {
   return false;
 }
 
-// ─── Smart Merge: picks up gifts/admin changes from server ───
+// ─── Server is the source of truth — overwrite local state ───
 export async function syncWalletFromServer(userId: string): Promise<void> {
   try {
     const { data, error } = await supabase.from('profiles').select(CORE_WALLET_COLS).eq('id', userId).single();
@@ -355,36 +360,22 @@ export async function syncWalletFromServer(userId: string): Promise<void> {
       return;
     }
 
-    const local = getLocalWallet();
-    const serverBeats = data.coins ?? 0;
-    const serverDiamonds = data.diamonds ?? 0;
-
-    // Take the HIGHER value — this preserves both local earnings AND server-side gifts
+    // Server overwrites local — no Math.max to prevent duplication exploits
     const mergedWallet: WalletState = {
-      beats: Math.max(local.beats, serverBeats),
-      diamonds: Math.max(local.diamonds, serverDiamonds),
-      totalEarned: Math.max(local.totalEarned, data.total_earned || 0),
-      totalSpent: Math.max(local.totalSpent, data.total_spent || 0),
+      beats: data.coins ?? 0,
+      diamonds: data.diamonds ?? 0,
+      totalEarned: data.total_earned || 0,
+      totalSpent: data.total_spent || 0,
     };
     saveLocalWallet(mergedWallet);
 
-    // Merge owned items (union of local + server)
+    // Items: server is authoritative
     if (data.owned_items) {
       try {
         const serverItems: OwnedItem[] = JSON.parse(data.owned_items);
-        const localItems = getOwnedItems();
-        const localIds = new Set(localItems.map(i => i.itemId));
-        for (const si of serverItems) {
-          if (!localIds.has(si.itemId)) {
-            localItems.push(si);
-          }
-        }
-        saveOwnedItems(localItems);
-      } catch(e) {}
+        saveOwnedItems(serverItems);
+      } catch(e) { console.warn('[Economy] Failed to parse server owned_items:', e); }
     }
-
-    // Push the merged state back to server
-    await syncWalletToSupabase(userId);
   } catch(e) {
     console.warn('syncWalletFromServer failed', e);
   }

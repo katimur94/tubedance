@@ -256,6 +256,30 @@ function ProceduralRobot({
     return { skin, eyeMat, torsoMat, legMat, shoeMat, armMat, hatMat, glassMat, beardMat, mustacheMat, wingMat, accMat, mouthMat, hasAnyLegendary, hasAnyEpic };
   }, [jacket, tshirt, vest, pants, shorts, shoes, hat, glasses, beard, mustache, wings, accessory, bp.skinColor, fp.eyeColor, fp.mouthStyle, danceState, torsoTexId, legTexId, hasJacket, hasTshirt, hasVest, hasShorts, hasPants, hasHat, hasGlasses, hasBeard, hasMustache, hasWings, hasAccessory]);
 
+  // Track previous materials and dispose them when they change or on unmount
+  const prevMaterialsRef = useRef<typeof materials | null>(null);
+  useEffect(() => {
+    // Dispose previous materials when new ones are created
+    if (prevMaterialsRef.current && prevMaterialsRef.current !== materials) {
+      const prev = prevMaterialsRef.current;
+      const matKeys = ['skin', 'eyeMat', 'torsoMat', 'legMat', 'shoeMat', 'armMat', 'hatMat', 'glassMat', 'beardMat', 'mustacheMat', 'wingMat', 'accMat', 'mouthMat'] as const;
+      matKeys.forEach((key) => {
+        const mat = prev[key];
+        if (mat && mat instanceof THREE.Material) mat.dispose();
+      });
+    }
+    prevMaterialsRef.current = materials;
+
+    // Dispose on unmount
+    return () => {
+      const matKeys = ['skin', 'eyeMat', 'torsoMat', 'legMat', 'shoeMat', 'armMat', 'hatMat', 'glassMat', 'beardMat', 'mustacheMat', 'wingMat', 'accMat', 'mouthMat'] as const;
+      matKeys.forEach((key) => {
+        const mat = materials[key];
+        if (mat && mat instanceof THREE.Material) mat.dispose();
+      });
+    };
+  }, [materials]);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (!group.current || !leftArm.current || !rightArm.current || !leftLeg.current || !rightLeg.current || !body.current || !head.current) return;

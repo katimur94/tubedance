@@ -63,19 +63,25 @@ export function Wardrobe({ userId, onBack }: WardrobeProps) {
 
     try {
       // Setze alle Items dieses Typs auf = false
-      await supabase.from('user_inventory')
-        .update({ is_equipped: false })
-        .eq('user_id', userId)
-        // Hier eigentlich filtern nach type via RPC oder Join, 
-        // für Einfachheit rufen wir alle ab, die gerade "true" waren vom selben Typ:
-        .in('item_id', inventory.filter(p => p.item.type === invItem.item.type).map(p => p.item.id));
-      
+      const sameTypeIds = inventory.filter(p => p.item.type === invItem.item.type).map(p => p.item.id);
+      if (sameTypeIds.length > 0) {
+        const { error: unequipError } = await supabase.from('user_inventory')
+          .update({ is_equipped: false })
+          .eq('user_id', userId)
+          .in('item_id', sameTypeIds);
+        if (unequipError) throw unequipError;
+      }
+
       // Neues setzen
-      await supabase.from('user_inventory')
+      const { error: equipError } = await supabase.from('user_inventory')
         .update({ is_equipped: true })
         .eq('id', invItem.id);
+      if (equipError) throw equipError;
     } catch (e) {
       console.error("Fehler beim Ausrüsten", e);
+      setErrorMsg("Fehler beim Ausrüsten. Bitte erneut versuchen.");
+      // Revert optimistic update
+      fetchInventory();
     }
   };
 

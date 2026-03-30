@@ -330,18 +330,24 @@ export class AudioAnalyzer {
   private lastTime = 0;
   private globalLast = 0;
   private _active = false;
+  private source: MediaStreamAudioSourceNode | null = null;
   private readonly B = [[1,7],[7,23],[23,93],[93,372]];
 
   async init(): Promise<boolean> {
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia(
+      const mediaPromise = navigator.mediaDevices.getDisplayMedia(
         { audio: true, video: { width: 1 as any, height: 1 as any, frameRate: 1 as any }, preferCurrentTab: true } as any
       );
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getDisplayMedia timeout')), 5000)
+      );
+      const s = await Promise.race([mediaPromise, timeoutPromise]);
       s.getVideoTracks().forEach(t => t.stop());
       if (!s.getAudioTracks().length) { s.getTracks().forEach(t => t.stop()); return false; }
       this.stream = s;
       this.audioCtx = new AudioContext();
       const src = this.audioCtx.createMediaStreamSource(new MediaStream(s.getAudioTracks()));
+      this.source = src;
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 2048;
       this.analyser.smoothingTimeConstant = 0.3;
@@ -382,6 +388,7 @@ export class AudioAnalyzer {
   destroy() {
     this._active = false;
     this.stream?.getTracks().forEach(t => t.stop());
+    this.source?.disconnect();
     this.audioCtx?.close();
     this.stream = null; this.audioCtx = null; this.analyser = null;
   }

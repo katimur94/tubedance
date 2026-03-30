@@ -44,8 +44,9 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
           }
         }
         if (channelRef.current) {
-          supabase.removeChannel(channelRef.current);
+          const ch = channelRef.current;
           channelRef.current = null;
+          ch.unsubscribe().then(() => supabase.removeChannel(ch));
         }
       }
     };
@@ -103,7 +104,8 @@ export function MultiplayerLobby({ onGameStart, userId, username }: MultiplayerL
     setInRoom(true);
     // Clean up any existing channels first
     if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+      const old = channelRef.current;
+      old.unsubscribe().then(() => supabase.removeChannel(old));
     }
 
     const channel = supabase.channel(`room:${code}`, {

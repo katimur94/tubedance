@@ -12,23 +12,31 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
   const startTimeRef = useRef(performance.now());
   const requestRef = useRef<number>(0);
   const positionRef = useRef(0);
+  const cancelledRef = useRef(false);
 
   // Measure duration in ms = (60 / bpm) * 4 beats * 1000
   const duration = (60 / bpm) * 4 * 1000;
 
-  const animate = (time: number) => {
-    const elapsed = time - startTimeRef.current;
-    let progress = (elapsed % duration) / duration;
-    positionRef.current = progress;
-
-    requestRef.current = requestAnimationFrame(animate);
-  };
-
   useEffect(() => {
+    cancelledRef.current = false;
     startTimeRef.current = performance.now();
+    const dur = (60 / bpm) * 4 * 1000;
+
+    const animate = (time: number) => {
+      if (cancelledRef.current) return;
+      const elapsed = time - startTimeRef.current;
+      let progress = (elapsed % dur) / dur;
+      positionRef.current = progress;
+
+      requestRef.current = requestAnimationFrame(animate);
+    };
+
     requestRef.current = requestAnimationFrame(animate);
 
-    return () => cancelAnimationFrame(requestRef.current);
+    return () => {
+      cancelledRef.current = true;
+      cancelAnimationFrame(requestRef.current);
+    };
   }, [bpm]);
 
   useEffect(() => {
@@ -51,10 +59,8 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
   const evaluateHit = () => {
     const pos = positionRef.current;
 
-    // The perfect target is roughly at 0.9 (assuming the 4th beat is the target)
-    // Or let's just make the target exactly 1.0 (end of loop) or 0.875 (middle of 4th section).
-    // Let's place the perfect area between 0.9 and 1.0. Target = 0.95
-    const target = 0.95;
+    // Perfect target at 90% — aligned with visual target indicator
+    const target = 0.90;
     const distance = Math.abs(pos - target);
 
     let result = 'Miss';
@@ -104,7 +110,7 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
         {/* Target Area (Perfect) */}
         <div
           className="absolute h-full bg-cyan-500/30 border-l-2 border-r-2 border-cyan-400/80 shadow-[0_0_15px_rgba(34,211,238,0.5)]"
-          style={{ left: '90%', width: '10%' }}
+          style={{ left: '87%', width: '6%' }}
         />
 
         {/* Moving Marker */}

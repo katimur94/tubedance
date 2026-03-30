@@ -54,7 +54,11 @@ export function Chat({ channelName, userId, username, userRole = 'user', minimiz
 
     channel.on('broadcast', { event: 'chat_message' }, (payload) => {
       const msg = payload.payload as ChatMessage;
-      setMessages(prev => [...prev.slice(-99), msg]);
+      setMessages(prev => {
+        // Deduplicate: skip if message with same ID already exists (e.g. locally added)
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev.slice(-99), msg];
+      });
       if (isMinimized) setUnread(u => u + 1);
     });
 
@@ -62,7 +66,7 @@ export function Chat({ channelName, userId, username, userRole = 'user', minimiz
     channelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      channel.unsubscribe().then(() => supabase.removeChannel(channel));
     };
   }, [channelName]);
 

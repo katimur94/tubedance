@@ -10,7 +10,7 @@
  * 6. Buchstaben-Bewertungen (S, A, B, C, D, F) pro Runde
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Star, Flame } from 'lucide-react';
 import { SyncBar } from '../SyncBar';
@@ -48,6 +48,7 @@ export function BeatUpMode({ bpm, onHit, onMiss, combo, round }: BeatUpModeProps
   const [roundRatings, setRoundRatings] = useState<HitRating[]>([]);
   const [showGrade, setShowGrade] = useState<LetterGrade | null>(null);
   const [successfulRounds, setSuccessfulRounds] = useState(0);
+  const errorTimeoutRef = useRef<any>(null);
   const isFinishMove = successfulRounds > 0 && successfulRounds % 4 === 0;
 
   const resetSequence = useCallback(() => {
@@ -77,6 +78,8 @@ export function BeatUpMode({ bpm, onHit, onMiss, combo, round }: BeatUpModeProps
       const direction = keyMap[e.key];
       if (!direction || currentIndex >= sequence.length) return;
 
+      e.preventDefault();
+
       if (sequence[currentIndex] === direction) {
         const nextIndex = currentIndex + 1;
         setCurrentIndex(nextIndex);
@@ -84,8 +87,9 @@ export function BeatUpMode({ bpm, onHit, onMiss, combo, round }: BeatUpModeProps
           setSequenceReady(true);
         }
       } else {
+        clearTimeout(errorTimeoutRef.current);
         setErrorHighlight(true);
-        setTimeout(() => {
+        errorTimeoutRef.current = setTimeout(() => {
           setCurrentIndex(0);
           setErrorHighlight(false);
         }, 300);

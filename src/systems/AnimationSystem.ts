@@ -57,12 +57,15 @@ class AnimationCache {
 
     const checks = Object.entries(ANIMATION_PATHS).map(async ([style, path]) => {
       try {
-        const response = await fetch(path, { method: 'HEAD' });
+        const timeout = new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error('HEAD request timeout')), 5000)
+        );
+        const response = await Promise.race([fetch(path, { method: 'HEAD' }), timeout]);
         if (response.ok) {
           this.availableAnimations.add(style as DanceStyle);
         }
       } catch {
-        // File not available – das ist OK
+        // File not available or timeout – das ist OK
       }
     });
 
@@ -121,7 +124,7 @@ class AnimationCache {
         },
         undefined,
         () => {
-          // Kein Error-Log nötig – wird bei Availability-Check schon geprüft
+          console.warn('[AnimationSystem] Failed to load:', path);
           resolve(null);
         }
       );

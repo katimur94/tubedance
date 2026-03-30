@@ -88,11 +88,11 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
       else if (accuracy >= 0.3) rating = 'Bad';
       else rating = 'Miss';
 
-      // Variety bonus: penalize repeating same direction
+      // Variety bonus: reward switching directions, penalize repeats
       let varietyMultiplier = 1;
       if (dirIndex === lastDirectionRef.current) {
-        repeatCountRef.current++;
         varietyMultiplier = Math.max(0.3, 1 - repeatCountRef.current * 0.2);
+        repeatCountRef.current++;
       } else {
         repeatCountRef.current = 0;
         varietyMultiplier = 1.2; // Bonus for switching

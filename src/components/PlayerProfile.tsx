@@ -2,7 +2,7 @@
  * PlayerProfile — Spielerprofil-Seite mit 3D-Avatar-Preview
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Trophy, Flame, Music, Users, Star, Target, Calendar } from 'lucide-react';
 import { AnimatedAvatar } from './AnimatedAvatar';
@@ -61,55 +61,66 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
   const [totalEarned, setTotalEarned] = useState(0);
 
   useEffect(() => {
+    const mountedRef = { current: true };
+    const currentUserId = userId;
+
+    const loadStats = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('total_games, highest_combo, win_count, daily_streak, role, total_earned')
+        .eq('id', currentUserId)
+        .single();
+
+      if (!mountedRef.current || currentUserId !== userId) return;
+
+      if (data) {
+        setStats({
+          totalGames: data.total_games || 0,
+          highestCombo: data.highest_combo || 0,
+          winCount: data.win_count || 0,
+          totalScore: data.total_earned || 0,
+          dailyStreak: data.daily_streak || 0,
+        });
+        setProfileRole(data.role || 'user');
+        setTotalEarned(data.total_earned || 0);
+      }
+
+      // Try to get more accurate score from leaderboard
+      const { data: lb } = await supabase
+        .from('leaderboard')
+        .select('total_score')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+
+      if (!mountedRef.current || currentUserId !== userId) return;
+      if (lb && lb.total_score) setStats(s => ({ ...s, totalScore: lb.total_score }));
+    };
+
+    const loadAchievements = async () => {
+      const { data } = await supabase
+        .from('user_achievements')
+        .select('achievement_id, unlocked_at, achievements(name, icon)')
+        .eq('user_id', currentUserId);
+
+      if (!mountedRef.current || currentUserId !== userId) return;
+
+      if (data) {
+        setAchievements(
+          data.map((a: any) => ({
+            id: a.achievement_id,
+            name: a.achievements?.name || a.achievement_id,
+            icon: a.achievements?.icon || '🏆',
+            unlockedAt: new Date(a.unlocked_at).toLocaleDateString('de-DE'),
+          }))
+        );
+      }
+    };
+
     loadStats();
     loadAchievements();
+
+    return () => { mountedRef.current = false; };
   }, [userId]);
-
-  const loadStats = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('total_games, highest_combo, win_count, daily_streak, role, total_earned')
-      .eq('id', userId)
-      .single();
-
-    if (data) {
-      setStats({
-        totalGames: data.total_games || 0,
-        highestCombo: data.highest_combo || 0,
-        winCount: data.win_count || 0,
-        totalScore: data.total_earned || 0, // default to total_earned
-        dailyStreak: data.daily_streak || 0,
-      });
-      setProfileRole(data.role || 'user');
-      setTotalEarned(data.total_earned || 0);
-    }
-
-    // Try to get more accurate score from leaderboard
-    const { data: lb } = await supabase
-      .from('leaderboard')
-      .select('total_score')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (lb && lb.total_score) setStats(s => ({ ...s, totalScore: lb.total_score }));
-  };
-
-  const loadAchievements = async () => {
-    const { data } = await supabase
-      .from('user_achievements')
-      .select('achievement_id, unlocked_at, achievements(name, icon)')
-      .eq('user_id', userId);
-
-    if (data) {
-      setAchievements(
-        data.map((a: any) => ({
-          id: a.achievement_id,
-          name: a.achievements?.name || a.achievement_id,
-          icon: a.achievements?.icon || '🏆',
-          unlockedAt: new Date(a.unlocked_at).toLocaleDateString('de-DE'),
-        }))
-      );
-    }
-  };
 
   const expNeeded = profile.level * 1000;
   const progress = (profile.exp / expNeeded) * 100;

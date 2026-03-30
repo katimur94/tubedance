@@ -5,7 +5,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Gift, Star, Coins, X, Check, Flame } from 'lucide-react';
-import { getLocalWallet, earnBeats, saveLocalWallet } from '../lib/economy';
+import { getLocalWallet, saveLocalWallet } from '../lib/economy';
+import { supabase } from '../lib/supabase';
 
 interface DailyRewardsProps {
   onClose: () => void;
@@ -36,15 +37,13 @@ function getDailyState(): DailyState {
 function saveDailyState(state: DailyState) {
   localStorage.setItem(DAILY_KEY, JSON.stringify(state));
   // Persist to Supabase
-  import('../lib/supabase').then(({ supabase }) => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        supabase.from('profiles').update({
-          daily_login_json: JSON.stringify(state),
-          daily_streak: state.streak,
-        }).eq('id', session.user.id).then(() => {}, () => {});
-      }
-    });
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user) {
+      supabase.from('profiles').update({
+        daily_login_json: state,
+        daily_streak: state.streak,
+      }).eq('id', session.user.id).then(() => {}, (err: any) => console.warn('[DailyRewards] save failed:', err));
+    }
   });
 }
 
@@ -72,25 +71,55 @@ export function DailyRewards({ onClose }: DailyRewardsProps) {
 
   const canClaim = !alreadyClaimed;
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (!canClaim) return;
 
-    // Update streak
+    // Calculate reward locally (used for both RPC success fallback and local-only mode)
     let newStreak = state.streak;
     if (state.lastClaim && isYesterday(state.lastClaim)) {
       newStreak = state.streak + 1;
-    } else if (state.lastClaim !== today) {
-      newStreak = state.lastClaim ? 1 : 1; // Reset if missed a day, or first time
-      if (!state.lastClaim) newStreak = 1;
+    } else {
+      newStreak = 1;
     }
-
-    // Determine reward
     const dayIndex = ((newStreak - 1) % 7);
     const reward = DAILY_REWARDS[dayIndex];
     const amount = reward.beats;
 
-    // Apply reward
-    earnBeats(amount, `Täglicher Login (Tag ${newStreak}, Streak ${Math.floor((newStreak - 1) / 7) + 1})`);
+    try {
+      // Try server-side claim first (prevents exploit via localStorage clearing)
+      const { data: serverReward, error } = await supabase.rpc('claim_daily_reward');
+
+      if (!error && typeof serverReward === 'number' && serverReward > 0) {
+        // Server validated — use server reward amount
+        const wallet = getLocalWallet();
+        wallet.beats += serverReward;
+        wallet.totalEarned += serverReward;
+        saveLocalWallet(wallet);
+
+        const newState: DailyState = { lastClaim: today, streak: newStreak };
+        saveDailyState(newState);
+        setState(newState);
+        setRewardAmount(serverReward);
+        setClaimed(true);
+        return;
+      }
+
+      // Server says already claimed today
+      if (error && (error.message?.includes('already') || error.message?.includes('Bereits'))) {
+        const newState: DailyState = { lastClaim: today, streak: state.streak };
+        saveDailyState(newState);
+        setState(newState);
+        return;
+      }
+    } catch (err) {
+      console.warn('[DailyRewards] RPC unavailable, using local fallback:', err);
+    }
+
+    // Fallback: local-only (RPC not deployed or failed)
+    const wallet = getLocalWallet();
+    wallet.beats += amount;
+    wallet.totalEarned += amount;
+    saveLocalWallet(wallet);
 
     const newState: DailyState = { lastClaim: today, streak: newStreak };
     saveDailyState(newState);

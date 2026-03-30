@@ -1,10 +1,13 @@
 /**
- * RoomBrowser — Audition-style Raum-Browser mit Raum-Liste, Quick Join, und Erstellung
- * 
+ * RoomBrowser — Audition-style Raum-Browser mit 20 festen Räumen, Quick Join, und Custom Rooms
+ *
+ * Fixed Rooms: 5 Räume pro Modus (Beat Up, Beat Rush, Freestyle, Club Dance)
+ * Leader = der am längsten im Raum befindliche Spieler (earliest joiner)
+ *
  * Leader Features:
  * - Spieler kicken
  * - Krone (Leadership) weitergeben
- * - Raum schließen/löschen
+ * - Raum schließen (nur Custom Rooms)
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -24,6 +27,24 @@ import { type UserRole } from '../lib/roles';
 import type { PlayerProfile } from './LockerRoom';
 import { LOCAL_PRESETS, type PlaylistSong, type Playlist } from './PlaylistManager';
 
+// ── Fixed Room Configuration ──
+
+interface FixedRoom {
+  channelName: string;
+  displayName: string;
+  mode: GameMode;
+  index: number;
+}
+
+const FIXED_ROOMS: FixedRoom[] = (['beat_up', 'beat_rush', 'freestyle', 'club_dance'] as GameMode[]).flatMap(mode =>
+  Array.from({ length: 5 }, (_, i) => ({
+    channelName: `fixed:${mode}:${i + 1}`,
+    displayName: `${mode.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} #${i + 1}`,
+    mode,
+    index: i + 1,
+  }))
+);
+
 interface GameRoom {
   id: string;
   room_code: string;
@@ -42,25 +63,28 @@ interface RoomBrowserProps {
   username: string;
   profile: PlayerProfile;
   userRole?: UserRole;
-  onGameStart: (roomCode: string, playlistId: string | null, mode: GameMode, songs?: PlaylistSong[]) => void;
+  rejoinRoomCode?: string | null;
+  onGameStart: (roomCode: string, playlistId: string | null, mode: GameMode, songs?: PlaylistSong[], liveJoin?: boolean, startedAt?: number) => void;
   onBack: () => void;
 }
 
 const MODE_ICONS: Record<string, typeof Zap> = { beat_up: Zap, beat_rush: ArrowDown, freestyle: Sparkles, club_dance: Users };
 
-export function RoomBrowser({ userId, username, profile, userRole = 'user', onGameStart, onBack }: RoomBrowserProps) {
-  const [rooms, setRooms] = useState<GameRoom[]>([]);
-  const [loading, setLoading] = useState(true);
+export function RoomBrowser({ userId, username, profile, userRole = 'user', rejoinRoomCode, onGameStart, onBack }: RoomBrowserProps) {
+  // Track status of fixed rooms (player count + playing state) from lobby broadcasts
+  const [fixedRoomStatus, setFixedRoomStatus] = useState<Record<string, { count: number; playing: boolean }>>({});
+  const [roomIsPlaying, setRoomIsPlaying] = useState(false); // true if a game is already running in this room
+  const [roomStartedAt, setRoomStartedAt] = useState(0); // timestamp when the room's game started
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [inRoom, setInRoom] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
-  const [players, setPlayers] = useState<{ id: string; name: string; ready: boolean; profile?: PlayerProfile; role?: UserRole }[]>([]);
+  const [players, setPlayers] = useState<{ id: string; name: string; ready: boolean; profile?: PlayerProfile; role?: UserRole; joined_at?: number }[]>([]);
   const [isReady, setIsReady] = useState(false);
   const [selectedMode, setSelectedMode] = useState<GameMode>('beat_up');
   const [roomName, setRoomName] = useState('');
-  const [filterMode, setFilterMode] = useState<GameMode | 'all'>('all');
+  const [filterMode, setFilterMode] = useState<GameMode | 'all'>('beat_up');
 
   // Join by code
   const [joinCode, setJoinCode] = useState('');
@@ -78,6 +102,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   // Leader management state
   const [hostId, setHostId] = useState<string | null>(null);
   const [playerMenuOpen, setPlayerMenuOpen] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ playerId: string; playerName: string; x: number; y: number } | null>(null);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [kickedNotice, setKickedNotice] = useState<string | null>(null);
   const [crownNotice, setCrownNotice] = useState<string | null>(null);
@@ -88,7 +113,9 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   const isHostRef = useRef(false);
   const inRoomRef = useRef<string | null>(null);
   const selectedSongsRef = useRef<PlaylistSong[]>([]);
-  const hostLookupDone = useRef(false); // prevent repeated DB lookups for host
+  const isFixedRoomRef = useRef(false);
+  const gameCheckCleanup = useRef<(() => void) | null>(null);
+  const hadPlayersRef = useRef(false); // track if we ever saw players (prevents auto-delete on join)
 
   // Keep refs in sync with state
   useEffect(() => { hostIdRef.current = hostId; }, [hostId]);
@@ -96,37 +123,118 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   useEffect(() => { inRoomRef.current = inRoom; }, [inRoom]);
   useEffect(() => { selectedSongsRef.current = selectedSongs; }, [selectedSongs]);
 
-  // Track whether this is the initial load vs. background auto-refresh
-  const isInitialLoad = useRef(true);
+  const mountedRef = useRef(true);
+
+  // Auto-rejoin room after returning from a game
+  const rejoinHandled = useRef(false);
+  useEffect(() => {
+    if (rejoinRoomCode && !rejoinHandled.current) {
+      rejoinHandled.current = true;
+      // Reset ready state but keep songs (they're locked to the room)
+      setIsReady(false);
+      isReadyRef.current = false;
+      autoStartFired.current = false;
+      setRoomIsPlaying(false);
+      setInRoom(rejoinRoomCode);
+
+      // Listen on the game channel to detect if anyone is still playing
+      // Clean up previous check if any
+      if (gameCheckCleanup.current) gameCheckCleanup.current();
+
+      const gameCheckCh = supabase.channel(`game:${rejoinRoomCode}`);
+      let lastPositionTime = 0;
+      let stopped = false;
+      const cleanup = () => {
+        if (stopped) return;
+        stopped = true;
+        clearInterval(checkInterval);
+        try { supabase.removeChannel(gameCheckCh); } catch {}
+        gameCheckCleanup.current = null;
+      };
+      gameCheckCleanup.current = cleanup;
+
+      gameCheckCh.on('broadcast', { event: 'song_position' }, (payload) => {
+        if (stopped) return;
+        lastPositionTime = Date.now();
+        setRoomIsPlaying(true);
+        // Save the room's start timestamp for sync
+        if (payload.payload?.startedAt) {
+          setRoomStartedAt(payload.payload.startedAt);
+        }
+        if (payload.payload?.songTitle && payload.payload?.videoId) {
+          const liveSong = {
+            video_id: payload.payload.videoId,
+            title: payload.payload.songTitle,
+            bpm: payload.payload.bpm || 120,
+            id: 'live',
+            position: 0,
+          };
+          setSelectedSongs([liveSong]);
+        }
+      });
+      gameCheckCh.subscribe();
+
+      // Periodically check if broadcasts stopped (= nobody playing anymore)
+      const checkInterval = setInterval(() => {
+        if (lastPositionTime > 0 && Date.now() - lastPositionTime > 6000) {
+          setRoomIsPlaying(false);
+          cleanup();
+        }
+      }, 3000);
+      // Initial timeout: if no broadcast after 5s, nobody is playing
+      setTimeout(() => {
+        if (lastPositionTime === 0 && !stopped) {
+          setRoomIsPlaying(false);
+          cleanup();
+        }
+      }, 5000);
+
+      const isFixed = rejoinRoomCode.startsWith('fixed:');
+      isFixedRoomRef.current = isFixed;
+
+      if (isFixed) {
+        const fixedRoom = FIXED_ROOMS.find(r => r.channelName === rejoinRoomCode);
+        setSelectedMode(fixedRoom?.mode || 'beat_up');
+        setIsHost(false);
+        joinChannel(rejoinRoomCode, false, true);
+      } else {
+        // Check DB to determine if we're still the host
+        supabase.from('game_rooms').select('host_id').eq('room_code', rejoinRoomCode).maybeSingle().then(({ data }) => {
+          const amHost = data?.host_id === userId;
+          setIsHost(amHost);
+          setHostId(data?.host_id || userId);
+          joinChannel(rejoinRoomCode, amHost, false);
+        }, () => {
+          // Room might be gone — just join as non-host
+          setIsHost(false);
+          joinChannel(rejoinRoomCode, false, false);
+        });
+      }
+    }
+  }, [rejoinRoomCode]);
 
   useEffect(() => {
-    loadRooms();
-    // Poll every 3s — fast enough to feel instant, Realtime below is a bonus
-    const interval = setInterval(() => loadRooms(true), 3000);
-
-    // Realtime: instant room list updates (requires Realtime enabled on game_rooms in Supabase Dashboard)
-    const roomChanges = supabase.channel('room_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_rooms' }, () => {
-        loadRooms(true);
-      })
-      .subscribe();
+    mountedRef.current = true;
 
     // Global lobby presence — shows who's in the multiplayer lobby
     const lobbyChannel = supabase.channel('lobby:global', {
       config: { presence: { key: userId } },
     });
-    lobbyChannel.on('broadcast', { event: 'room_update' }, () => {
-      // Another player created/deleted a room — refresh list instantly
-      loadRooms(true);
-    });
     lobbyChannel.on('presence', { event: 'sync' }, () => {
       const state = lobbyChannel.presenceState();
-      const players: { id: string; name: string; role?: UserRole }[] = [];
+      const lobbyPlayers: { id: string; name: string; role?: UserRole }[] = [];
       for (const [key, value] of Object.entries(state)) {
         const v = (value as any)[0];
-        players.push({ id: key, name: v.name, role: v.role });
+        lobbyPlayers.push({ id: key, name: v.name, role: v.role });
       }
-      setOnlinePlayers(players);
+      setOnlinePlayers(lobbyPlayers);
+    });
+    // Listen for room status updates from players in rooms
+    lobbyChannel.on('broadcast', { event: 'room_status' }, (payload) => {
+      const { channelName, count, playing } = payload.payload;
+      if (channelName) {
+        setFixedRoomStatus(prev => ({ ...prev, [channelName]: { count: count || 0, playing: !!playing } }));
+      }
     });
     lobbyChannel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
@@ -136,62 +244,19 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
     lobbyChannelRef.current = lobbyChannel;
 
     return () => {
-      clearInterval(interval);
-      supabase.removeChannel(roomChanges);
+      mountedRef.current = false;
       supabase.removeChannel(lobbyChannel);
     };
   }, []);
 
-  // Close player menu when clicking outside
+  // Close player menu / context menu when clicking outside
   useEffect(() => {
-    const handler = () => setPlayerMenuOpen(null);
-    if (playerMenuOpen) {
+    const handler = () => { setPlayerMenuOpen(null); setContextMenu(null); };
+    if (playerMenuOpen || contextMenu) {
       document.addEventListener('click', handler);
       return () => document.removeEventListener('click', handler);
     }
-  }, [playerMenuOpen]);
-
-  const loadRooms = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      // Clean up stale rooms from this user on first load
-      if (isInitialLoad.current) {
-        isInitialLoad.current = false;
-        try {
-          await supabase.from('game_rooms').delete()
-            .eq('host_id', userId)
-            .eq('is_playing', false);
-        } catch { /* ignore cleanup failures */ }
-      }
-
-      const { data, error } = await supabase
-        .from('game_rooms')
-        .select('*')
-        .eq('is_playing', false)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.warn('[RoomBrowser] loadRooms error:', error.message);
-      } else if (data) {
-        setRooms(data.map((r: any) => ({
-          id: r.id,
-          room_code: r.room_code,
-          name: r.name || `Raum ${r.room_code}`,
-          host_id: r.host_id,
-          mode: r.mode || 'beat_up',
-          max_players: r.max_players || 8,
-          current_players: 0,
-          is_playing: r.is_playing,
-          is_locked: r.is_locked || false,
-        })));
-      }
-    } catch (err) {
-      console.warn('[RoomBrowser] loadRooms failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [playerMenuOpen, contextMenu]);
 
   const createRoom = async () => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -249,20 +314,23 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
     setIsHost(true);
     setHostId(userId);
     setShowCreate(false);
-    joinChannel(code, true);
-
-    // Notify all lobby players that a new room exists
-    if (lobbyChannelRef.current) {
-      lobbyChannelRef.current.send({ type: 'broadcast', event: 'room_update', payload: {} });
-    }
+    isFixedRoomRef.current = false;
+    joinChannel(code, true, false);
   };
 
-
+  const joinFixedRoom = (room: FixedRoom) => {
+    setInRoom(room.channelName);
+    setSelectedMode(room.mode);
+    setIsHost(false);
+    isFixedRoomRef.current = true;
+    joinChannel(room.channelName, false, true);
+  };
 
   const joinRoom = (code: string) => {
     setInRoom(code);
     setIsHost(false);
-    joinChannel(code, false);
+    isFixedRoomRef.current = false;
+    joinChannel(code, false, false);
   };
 
   const joinByCode = () => {
@@ -274,22 +342,25 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   };
 
   const quickJoin = () => {
-    const available = rooms.filter(r => !r.is_playing && !r.is_locked && r.current_players < r.max_players);
-    if (available.length > 0) {
-      const random = available[Math.floor(Math.random() * available.length)];
-      joinRoom(random.room_code);
-    } else {
-      setSelectedMode('beat_up');
-      setRoomName('Quick Match');
-      createRoom();
-    }
+    // Pick a random fixed room to join
+    const randomRoom = FIXED_ROOMS[Math.floor(Math.random() * FIXED_ROOMS.length)];
+    joinFixedRoom(randomRoom);
   };
 
-  const joinChannel = (code: string, asHost: boolean) => {
+  const joinChannel = (code: string, asHost: boolean, isFixed: boolean) => {
     // Clean up any existing channels first
     if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+      try { supabase.removeChannel(channelRef.current); } catch {}
+      channelRef.current = null;
     }
+
+    // Also remove any leftover channel with the same room name
+    const existing = supabase.getChannels().find(ch => ch.topic === `realtime:room:${code}`);
+    if (existing) {
+      try { supabase.removeChannel(existing); } catch {}
+    }
+
+    isFixedRoomRef.current = isFixed;
 
     const channel = supabase.channel(`room:${code}`, {
       config: { presence: { key: userId } },
@@ -302,66 +373,97 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
         for (const [key, value] of Object.entries(state)) {
           // Use the LAST presence entry (most recent) instead of first
           const entries = value as any[];
+          if (!Array.isArray(entries) || entries.length === 0) continue;
           const v = entries[entries.length - 1];
+          if (!v) continue;
           // For the current user, always use local ready state (no roundtrip delay)
           const ready = key === userId ? isReadyRef.current : (v.ready === true);
-          activePlayers.push({ id: key, name: v.name, ready, profile: v.profile, role: v.role });
+          activePlayers.push({ id: key, name: v.name, ready, profile: v.profile, role: v.role, joined_at: v.joined_at });
         }
         setPlayers(activePlayers);
 
-        // Use refs to get the latest values (avoid stale closures)
-        const currentHostId = hostIdRef.current;
-
-        // Auto-close: if no players remain and we were previously in the room, delete it
-        // Check inRoomRef.current to avoid deleting the room milliseconds after creating it before we tracked in
-        if (activePlayers.length === 0 && inRoomRef.current) {
-          supabase.from('game_rooms').delete().eq('room_code', code).then(() => {}, () => {});
-          return;
+        // Broadcast room status to lobby so other players see player counts
+        if (lobbyChannelRef.current && code.startsWith('fixed:')) {
+          lobbyChannelRef.current.send({
+            type: 'broadcast',
+            event: 'room_status',
+            payload: { channelName: code, count: activePlayers.length, playing: false },
+          });
         }
 
-        // Determine host from presence data
-        if (activePlayers.length > 0) {
-          const hostStillHere = currentHostId ? activePlayers.find((p: any) => p.id === currentHostId) : null;
+        // Use refs to get the latest values (avoid stale closures)
+        const currentHostId = hostIdRef.current;
+        const currentIsFixed = isFixedRoomRef.current;
 
-          if (currentHostId && !hostStillHere) {
-            // Host is gone — promote the first remaining player
-            const newLeader = activePlayers[0];
-            const newLeaderId = newLeader.id;
-            setHostId(newLeaderId);
-            if (newLeaderId === userId) {
-              setIsHost(true);
-              setCrownNotice('Der Leader hat den Raum verlassen. Du bist jetzt der Leader!');
-              setTimeout(() => setCrownNotice(null), 3000);
-              supabase.from('game_rooms').update({ host_id: userId }).eq('room_code', code).then(() => {}, () => {});
-            } else {
-              setIsHost(false);
-              setCrownNotice(`${newLeader.name} ist jetzt der Leader!`);
-              setTimeout(() => setCrownNotice(null), 3000);
-            }
-          } else if (!currentHostId && !hostLookupDone.current) {
-            // We don't know the host yet — check DB once (not on every sync)
-            hostLookupDone.current = true;
-            supabase.from('game_rooms').select('host_id').eq('room_code', code).maybeSingle().then(({ data }) => {
-              if (data) {
-                const dbHostHere = activePlayers.find((p: any) => p.id === data.host_id);
-                if (dbHostHere) {
-                  setHostId(data.host_id);
-                  setIsHost(data.host_id === userId);
-                } else if (activePlayers.length > 0) {
-                  // DB host not present — promote first player
-                  const newLeader = activePlayers[0];
-                  setHostId(newLeader.id);
-                  setIsHost(newLeader.id === userId);
-                  supabase.from('game_rooms').update({ host_id: newLeader.id }).eq('room_code', code).then(() => {}, () => {});
-                }
+        if (currentIsFixed) {
+          // ── Fixed Room Leader Logic ──
+          // Leader = longest-staying player (earliest joined_at)
+          if (activePlayers.length > 0) {
+            const sorted = [...activePlayers].sort((a, b) => (a.joined_at || 0) - (b.joined_at || 0));
+            const leader = sorted[0]; // earliest joiner still present
+            setHostId(leader.id);
+            setIsHost(leader.id === userId);
+          } else {
+            setHostId(null);
+            setIsHost(false);
+          }
+        } else {
+          // ── Custom Room Leader Logic (DB-backed) ──
+
+          // Auto-close: if no players remain and we previously saw players, delete the room
+          if (activePlayers.length === 0 && inRoomRef.current && hadPlayersRef.current) {
+            supabase.from('game_rooms').delete().eq('room_code', code).then(() => {}, (err: any) => console.warn('[RoomBrowser] auto-close failed:', err));
+            return;
+          }
+          if (activePlayers.length > 0) {
+            hadPlayersRef.current = true;
+          }
+
+          // Determine host from presence data
+          if (activePlayers.length > 0) {
+            const hostStillHere = currentHostId ? activePlayers.find((p: any) => p.id === currentHostId) : null;
+
+            if (currentHostId && !hostStillHere) {
+              // Host is gone — promote the first remaining player
+              const newLeader = activePlayers[0];
+              const newLeaderId = newLeader.id;
+              setHostId(newLeaderId);
+              if (newLeaderId === userId) {
+                setIsHost(true);
+                setCrownNotice('Der Leader hat den Raum verlassen. Du bist jetzt der Leader!');
+                setTimeout(() => setCrownNotice(null), 3000);
+                supabase.from('game_rooms').update({ host_id: userId }).eq('room_code', code).then(() => {}, () => {});
               } else {
-                // Room doesn't exist in DB — just pick first player as host
-                if (activePlayers.length > 0) {
-                  setHostId(activePlayers[0].id);
-                  setIsHost(activePlayers[0].id === userId);
-                }
+                setIsHost(false);
+                setCrownNotice(`${newLeader.name} ist jetzt der Leader!`);
+                setTimeout(() => setCrownNotice(null), 3000);
               }
-            });
+            } else if (!currentHostId) {
+              // We don't know the host yet — check DB once
+              supabase.from('game_rooms').select('host_id').eq('room_code', code).maybeSingle().then(({ data }) => {
+                if (data) {
+                  const dbHostHere = activePlayers.find((p: any) => p.id === data.host_id);
+                  if (dbHostHere) {
+                    setHostId(data.host_id);
+                    setIsHost(data.host_id === userId);
+                  } else if (activePlayers.length > 0) {
+                    // DB host not present — promote first player
+                    const newLeader = activePlayers[0];
+                    setHostId(newLeader.id);
+                    setIsHost(newLeader.id === userId);
+                    supabase.from('game_rooms').update({ host_id: newLeader.id }).eq('room_code', code).then(() => {}, () => {});
+                  }
+                } else {
+                  // Room doesn't exist in DB — just pick first player as host
+                  if (activePlayers.length > 0) {
+                    setHostId(activePlayers[0].id);
+                    setIsHost(activePlayers[0].id === userId);
+                  }
+                }
+              }, (err) => {
+                console.warn('[RoomBrowser] host lookup failed:', err);
+              });
+            }
           }
         }
       })
@@ -380,7 +482,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
         setHostId(newHostId);
         if (newHostId === userId) {
           setIsHost(true);
-          setCrownNotice('Du bist jetzt der Leader! 👑');
+          setCrownNotice('Du bist jetzt der Leader!');
           setTimeout(() => setCrownNotice(null), 3000);
         } else {
           setIsHost(false);
@@ -389,8 +491,8 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
         }
       })
       .on('broadcast', { event: 'room_closed' }, () => {
-        // Use ref to avoid stale closure
-        if (!isHostRef.current) {
+        // Use ref to avoid stale closure — only applies to custom rooms
+        if (!isHostRef.current && !isFixedRoomRef.current) {
           setKickedNotice('Der Raum wurde vom Leader geschlossen.');
           setTimeout(() => {
             leaveRoom();
@@ -405,30 +507,42 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
         setSelectedPlaylist({ id: 'remote', title: payload.payload.playlistTitle, is_preset: true, created_by: null });
       })
       .on('broadcast', { event: 'game_start' }, (payload) => {
-        // Broadcast-based start — songs are sent directly so all clients use the same playlist
         const songs = payload.payload.songs || [];
-        onGameStart(code, null, payload.payload.mode || 'beat_up', songs);
+        const startedAt = payload.payload.startedAt || Date.now();
+        const isLateJoin = (Date.now() - startedAt) > 5000;
+        onGameStart(code, null, payload.payload.mode || 'beat_up', songs, isLateJoin, startedAt);
       })
-      .on('postgres_changes', {
+      .on('broadcast', { event: 'game_active' }, (payload) => {
+        // Another player is already in a game in this room — show "live join" option
+        if (payload.payload.playing) {
+          setRoomIsPlaying(true);
+        }
+      });
+
+    // Only listen for DB changes on custom rooms
+    if (!isFixed) {
+      channel.on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${code}`,
       }, (payload) => {
         if (payload.new.is_playing) {
           onGameStart(code, payload.new.playlist_id, payload.new.mode || 'beat_up', selectedSongsRef.current);
         }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ name: username, online_at: new Date().toISOString(), ready: false, profile, role: userRole });
-          // Load host_id from DB on join
-          if (!asHost) {
-            const { data } = await supabase.from('game_rooms').select('host_id').eq('room_code', code).maybeSingle();
-            if (data) {
-              setHostId(data.host_id);
-              setIsHost(data.host_id === userId);
-            }
+      });
+    }
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({ name: username, online_at: new Date().toISOString(), ready: false, profile, role: userRole, joined_at: Date.now() });
+        // Load host_id from DB on join (custom rooms only)
+        if (!asHost && !isFixed) {
+          const { data } = await supabase.from('game_rooms').select('host_id').eq('room_code', code).maybeSingle();
+          if (data) {
+            setHostId(data.host_id);
+            setIsHost(data.host_id === userId);
           }
         }
-      });
+      }
+    });
 
     channelRef.current = channel;
   };
@@ -440,7 +554,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
     isReadyRef.current = newReady;
     setIsReady(newReady);
     if (channelRef.current) {
-      channelRef.current.track({ name: username, ready: newReady, profile, role: userRole });
+      channelRef.current.track({ name: username, ready: newReady, profile, role: userRole, joined_at: Date.now() });
     }
   };
 
@@ -448,35 +562,49 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
     if (!inRoom) return;
     const allReady = players.length >= 2 && players.every(p => p.ready);
     if (!allReady) return;
-    await supabase.from('game_rooms').update({ is_playing: true }).eq('room_code', inRoom);
+    if (!isFixedRoomRef.current) {
+      await supabase.from('game_rooms').update({ is_playing: true }).eq('room_code', inRoom);
+    }
   };
 
-  // Auto-start: when all players are ready (minimum 2), any client triggers the DB update
-  // The update is idempotent (setting is_playing=true twice is harmless)
-  // and the postgres_changes listener on the channel fires onGameStart for everyone
+  // Auto-start: only the HOST triggers DB update + broadcast to avoid race conditions
   const autoStartFired = useRef(false);
   useEffect(() => {
     if (!inRoom || players.length < 2) { autoStartFired.current = false; return; }
     const allReady = players.every(p => p.ready);
     if (allReady && !autoStartFired.current) {
       autoStartFired.current = true;
+
+      // Only the host initiates the start — other clients wait for the broadcast
+      if (!isHostRef.current) return;
+
       const timer = setTimeout(() => {
         const songs = selectedSongsRef.current;
-        console.log('[RoomBrowser] Auto-start: all ready, starting game with', songs.length, 'songs');
-        // Update DB
-        supabase.from('game_rooms').update({ is_playing: true }).eq('room_code', inRoom)
-          .then(({ error }) => {
-            if (error) {
-              console.warn('[RoomBrowser] Auto-start DB update failed:', error.message);
-              autoStartFired.current = false;
-            }
-          });
-        // Broadcast start with songs directly — all clients get the same playlist
+        console.log('[RoomBrowser] Host initiating auto-start with', songs.length, 'songs');
+        // Update DB (only host, only custom rooms)
+        if (!isFixedRoomRef.current) {
+          supabase.from('game_rooms').update({ is_playing: true }).eq('room_code', inRoom)
+            .then(({ error }) => {
+              if (error) {
+                console.warn('[RoomBrowser] Auto-start DB update failed:', error.message);
+                autoStartFired.current = false;
+              }
+            });
+        }
+        // Broadcast start (only host)
         if (channelRef.current) {
           channelRef.current.send({
             type: 'broadcast',
             event: 'game_start',
-            payload: { mode: selectedMode, songs },
+            payload: { mode: selectedMode, songs, startedAt: Date.now() },
+          });
+        }
+        // Broadcast "playing" status to lobby
+        if (lobbyChannelRef.current && isFixedRoomRef.current) {
+          lobbyChannelRef.current.send({
+            type: 'broadcast',
+            event: 'room_status',
+            payload: { channelName: inRoom, count: players.length, playing: true },
           });
         }
         // Fallback: start locally after 2s if neither listener fires
@@ -492,48 +620,82 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   const leaveRoom = () => {
     const currentInRoom = inRoomRef.current || inRoom;
     const currentIsHost = isHostRef.current || isHost;
+    const currentIsFixed = isFixedRoomRef.current;
     const channelToRemove = channelRef.current;
     channelRef.current = null;
 
-    // If we're the host, transfer crown to next player before leaving
-    if (currentIsHost && channelToRemove && players.length > 1) {
-      const nextPlayer = players.find(p => p.id !== userId);
-      if (nextPlayer) {
-        // Update DB FIRST (synchronous source of truth)
-        if (currentInRoom) {
-          supabase.from('game_rooms').update({ host_id: nextPlayer.id }).eq('room_code', currentInRoom).then(() => {}, () => {});
+    // Always untrack presence first so other clients see us leave immediately
+    const cleanupChannel = (ch: any, delay = 0) => {
+      if (!ch) return;
+      ch.untrack().then(() => {
+        if (delay > 0) {
+          setTimeout(() => ch.unsubscribe().then(() => supabase.removeChannel(ch)), delay);
+        } else {
+          ch.unsubscribe().then(() => supabase.removeChannel(ch));
         }
-        // Broadcast crown transfer, then remove channel after a delay so it arrives
-        channelToRemove.send({
-          type: 'broadcast',
-          event: 'crown_transfer',
-          payload: { newHostId: nextPlayer.id, newHostName: nextPlayer.name },
-        });
-        // Delay channel removal so the broadcast can be delivered
-        setTimeout(() => supabase.removeChannel(channelToRemove), 500);
+      }, () => {
+        // untrack failed — still clean up
+        if (delay > 0) {
+          setTimeout(() => supabase.removeChannel(ch), delay);
+        } else {
+          supabase.removeChannel(ch);
+        }
+      });
+    };
+
+    if (currentIsFixed) {
+      // Fixed rooms: no DB operations, just clean up channel
+      // Crown transfer via broadcast if host leaving with other players
+      if (currentIsHost && channelToRemove && players.length > 1) {
+        const nextPlayer = players.find(p => p.id !== userId);
+        if (nextPlayer) {
+          channelToRemove.send({
+            type: 'broadcast',
+            event: 'crown_transfer',
+            payload: { newHostId: nextPlayer.id, newHostName: nextPlayer.name },
+          });
+          cleanupChannel(channelToRemove, 500);
+        } else {
+          cleanupChannel(channelToRemove);
+        }
       } else {
-        supabase.removeChannel(channelToRemove);
+        cleanupChannel(channelToRemove);
       }
     } else {
-      // If we're the last player, delete the room from DB (auto-close)
-      if (players.length <= 1 && currentInRoom) {
-        supabase.from('game_rooms').delete().eq('room_code', currentInRoom).then(() => {}, () => {});
+      // Custom rooms: DB operations for host transfer and cleanup
+      if (currentIsHost && channelToRemove && players.length > 1) {
+        const nextPlayer = players.find(p => p.id !== userId);
+        if (nextPlayer) {
+          if (currentInRoom) {
+            supabase.from('game_rooms').update({ host_id: nextPlayer.id }).eq('room_code', currentInRoom).then(() => {}, () => {});
+          }
+          channelToRemove.send({
+            type: 'broadcast',
+            event: 'crown_transfer',
+            payload: { newHostId: nextPlayer.id, newHostName: nextPlayer.name },
+          });
+          cleanupChannel(channelToRemove, 500);
+        } else {
+          cleanupChannel(channelToRemove);
+        }
+      } else {
+        // If we're the last player, delete the room from DB
+        if (players.length <= 1 && currentInRoom) {
+          supabase.from('game_rooms').delete().eq('room_code', currentInRoom).then(() => {}, () => {});
+        }
+        cleanupChannel(channelToRemove);
       }
-      if (channelToRemove) {
-        supabase.removeChannel(channelToRemove);
-      }
-    }
-
-    // Notify lobby that room list changed
-    if (lobbyChannelRef.current) {
-      lobbyChannelRef.current.send({ type: 'broadcast', event: 'room_update', payload: {} });
     }
 
     setInRoom(null);
     setIsHost(false);
     setIsReady(false);
     isReadyRef.current = false;
-    hostLookupDone.current = false;
+    isFixedRoomRef.current = false;
+    hadPlayersRef.current = false;
+    setRoomIsPlaying(false);
+    setRoomStartedAt(0);
+    if (gameCheckCleanup.current) gameCheckCleanup.current();
     setPlayers([]);
     setHostId(null);
     setPlayerMenuOpen(null);
@@ -555,9 +717,11 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   const transferCrown = async (newHostId: string) => {
     if (!isHost || !channelRef.current || !inRoom || newHostId === userId) return;
     const newHostPlayer = players.find(p => p.id === newHostId);
-    
-    // Update DB
-    await supabase.from('game_rooms').update({ host_id: newHostId }).eq('room_code', inRoom);
+
+    // Update DB (custom rooms only)
+    if (!isFixedRoomRef.current) {
+      await supabase.from('game_rooms').update({ host_id: newHostId }).eq('room_code', inRoom);
+    }
 
     // Broadcast to all players
     channelRef.current.send({
@@ -575,6 +739,9 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   const closeRoom = async () => {
     if (!isHost || !inRoom) return;
 
+    // Only custom rooms can be closed
+    if (isFixedRoomRef.current) return;
+
     // Broadcast room closure to all players
     if (channelRef.current) {
       channelRef.current.send({
@@ -591,7 +758,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
     leaveRoom();
   };
 
-  const filteredRooms = filterMode === 'all' ? rooms : rooms.filter(r => r.mode === filterMode);
+  const filteredFixedRooms = filterMode === 'all' ? FIXED_ROOMS : FIXED_ROOMS.filter(r => r.mode === filterMode);
 
   // ── Kicked / Crown Notice Overlay ──
   const noticeOverlay = (kickedNotice || crownNotice) && (
@@ -613,6 +780,8 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
   // ── In Room View ──
   if (inRoom) {
     const allReady = players.length >= 2 && players.every(p => p.ready);
+    const isFixedRoom = inRoom.startsWith('fixed:');
+    const fixedRoomInfo = FIXED_ROOMS.find(r => r.channelName === inRoom);
 
     return (
       <div className="fixed inset-0 bg-[#1a0a2e] flex z-50 font-sans text-white">
@@ -626,13 +795,19 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
               <button onClick={leaveRoom} className="px-5 py-2 bg-purple-900/50 hover:bg-red-600 border border-purple-700 rounded-full text-sm font-black uppercase tracking-widest transition-colors">
                 Verlassen
               </button>
-              <div className="flex items-center gap-2 px-4 py-2 bg-purple-900/50 border border-purple-700/50 rounded-full">
-                <span className="text-purple-400 text-xs font-black uppercase tracking-widest">Code:</span>
-                <span className="text-cyan-400 font-mono font-black text-lg tracking-widest">{inRoom}</span>
-                <button onClick={() => navigator.clipboard.writeText(inRoom)} className="p-1 hover:bg-purple-800 rounded text-purple-400">
-                  <Copy size={14} />
-                </button>
-              </div>
+              {isFixedRoom ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-purple-900/50 border border-purple-700/50 rounded-full">
+                  <span className="text-cyan-400 font-black text-lg">{fixedRoomInfo?.displayName}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 bg-purple-900/50 border border-purple-700/50 rounded-full">
+                  <span className="text-purple-400 text-xs font-black uppercase tracking-widest">Code:</span>
+                  <span className="text-cyan-400 font-mono font-black text-lg tracking-widest">{inRoom}</span>
+                  <button onClick={() => navigator.clipboard.writeText(inRoom)} className="p-1 hover:bg-purple-800 rounded text-purple-400">
+                    <Copy size={14} />
+                  </button>
+                </div>
+              )}
               {isHost && (
                 <div className="flex items-center gap-1 px-3 py-2 bg-yellow-900/30 border border-yellow-500/30 rounded-full">
                   <Crown size={14} className="text-yellow-400" />
@@ -641,8 +816,8 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
               )}
             </div>
 
-            {/* Host: Close Room Button */}
-            {isHost && (
+            {/* Host: Close Room Button (custom rooms only) */}
+            {isHost && !isFixedRoom && (
               <div className="relative">
                 {showCloseConfirm ? (
                   <motion.div
@@ -775,21 +950,23 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
           <div className="mt-6 w-full max-w-xl px-8">
             {/* Current selection display */}
             <div className="flex items-center gap-3 mb-3">
-              <Music size={16} className="text-pink-400" />
-              <span className="text-sm font-bold text-purple-300">
-                {selectedSongs.length > 0
-                  ? `${selectedPlaylist?.title || 'Playlist'} — ${selectedSongs.length} Songs`
-                  : 'Kein Song ausgewählt (Default wird genutzt)'}
+              <Music size={16} className={roomIsPlaying ? 'text-orange-400 animate-pulse' : 'text-pink-400'} />
+              <span className={`text-sm font-bold ${roomIsPlaying ? 'text-orange-300' : 'text-purple-300'}`}>
+                {roomIsPlaying
+                  ? `🎵 Spielt gerade: ${selectedSongs[0]?.title || 'Default Song'}`
+                  : selectedSongs.length > 0
+                    ? `${selectedPlaylist?.title || 'Playlist'} — ${selectedSongs.length} Songs`
+                    : 'Kein Song ausgewählt (Default wird genutzt)'}
               </span>
-              {selectedSongs.length > 0 && selectedSongs[0] && (
+              {!roomIsPlaying && selectedSongs.length > 0 && selectedSongs[0] && (
                 <span className="text-xs text-purple-500 truncate max-w-[200px]">
                   ({selectedSongs[0].title}{selectedSongs.length > 1 ? ` +${selectedSongs.length - 1}` : ''})
                 </span>
               )}
             </div>
 
-            {/* Song picker toggle (Leader only) */}
-            {isHost && (
+            {/* Song picker toggle (Leader only, hidden when game is playing) */}
+            {isHost && !roomIsPlaying && (
               <>
                 <button
                   onClick={() => setShowSongPicker(!showSongPicker)}
@@ -814,9 +991,9 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
                         {LOCAL_PRESETS.map(preset => (
                           <div key={preset.id}>
                             {/* Playlist header */}
-                            <button
+                            <div
                               onClick={() => setSongPickerExpanded(songPickerExpanded === preset.id ? null : preset.id)}
-                              className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold hover:bg-purple-800/30 transition-colors ${
+                              className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold hover:bg-purple-800/30 transition-colors cursor-pointer ${
                                 selectedPlaylist?.id === preset.id ? 'text-pink-300 bg-pink-900/20' : 'text-purple-200'
                               }`}
                             >
@@ -828,7 +1005,6 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
                                     setSelectedPlaylist(preset);
                                     setSelectedSongs(preset.songs || []);
                                     setShowSongPicker(false);
-                                    // Broadcast playlist selection to other players
                                     if (channelRef.current) {
                                       channelRef.current.send({
                                         type: 'broadcast',
@@ -843,7 +1019,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
                                 </button>
                                 {songPickerExpanded === preset.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                               </div>
-                            </button>
+                            </div>
 
                             {/* Song list */}
                             <AnimatePresence>
@@ -891,22 +1067,37 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
 
           {/* Controls */}
           <div className="mt-4 flex gap-4">
-            {/* Everyone can toggle ready */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={toggleReady}
-              className={`px-12 py-4 rounded-2xl font-black text-xl uppercase tracking-widest ${
-                isReady
-                  ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.4)]'
-                  : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600'
-              }`}
-            >
-              {isReady ? '✓ Bereit!' : 'Bereit?'}
-            </motion.button>
+            {roomIsPlaying ? (
+              /* Game is already running — show live join button */
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  const songs = selectedSongsRef.current;
+                  onGameStart(inRoom!, null, selectedMode, songs.length > 0 ? songs : undefined, true, roomStartedAt || undefined);
+                }}
+                className="px-12 py-4 rounded-2xl font-black text-xl uppercase tracking-widest bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-400 hover:to-pink-500 text-white shadow-[0_0_20px_rgba(249,115,22,0.4)] animate-pulse"
+              >
+                🎵 Live beitreten
+              </motion.button>
+            ) : (
+              /* Normal ready toggle */
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={toggleReady}
+                className={`px-12 py-4 rounded-2xl font-black text-xl uppercase tracking-widest ${
+                  isReady
+                    ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.4)]'
+                    : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600'
+                }`}
+              >
+                {isReady ? '✓ Bereit!' : 'Bereit?'}
+              </motion.button>
+            )}
 
             {/* Auto-start hint */}
-            {players.length >= 2 && (
+            {!roomIsPlaying && players.length >= 2 && (
               <div className="flex items-center px-4 text-sm text-purple-400 font-bold">
                 {allReady
                   ? <span className="text-green-400 animate-pulse">Spiel startet...</span>
@@ -941,7 +1132,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
                 <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 uppercase tracking-wider">
                   Multiplayer Lobby
                 </h1>
-                <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mt-1">{rooms.length} Räume &middot; {onlinePlayers.length} Spieler online</p>
+                <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mt-1">20 Räume &middot; {onlinePlayers.length} Spieler online</p>
               </div>
             </div>
           </div>
@@ -954,9 +1145,6 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
               className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(236,72,153,0.3)] flex items-center gap-2">
               <Plus size={14} /> Raum erstellen
             </motion.button>
-            <button onClick={() => loadRooms(false)} className="p-2.5 bg-purple-900/50 hover:bg-purple-800 border border-purple-700/30 rounded-xl text-purple-400 transition-colors">
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
           </div>
         </div>
 
@@ -980,70 +1168,72 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
           </div>
         </div>
 
-        {/* Mode Filters */}
-        <div className="flex gap-2 mb-4">
+        {/* Mode Filter Tabs */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {(['beat_up', 'beat_rush', 'freestyle', 'club_dance'] as GameMode[]).map(m => {
+            const modeConfig = GAME_MODES.find(gm => gm.id === m);
+            return (
+              <button key={m} onClick={() => setFilterMode(m)}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  filterMode === m ? 'bg-pink-600 text-white' : 'bg-purple-900/50 text-purple-300 border border-purple-700/30'
+                }`}>
+                {modeConfig?.name || m.replace('_', ' ')}
+              </button>
+            );
+          })}
           <button onClick={() => setFilterMode('all')}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${filterMode === 'all' ? 'bg-pink-600 text-white' : 'bg-purple-900/30 text-purple-400 border border-purple-700/30'}`}>
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+              filterMode === 'all' ? 'bg-pink-600 text-white' : 'bg-purple-900/50 text-purple-300 border border-purple-700/30'
+            }`}>
             Alle
           </button>
-          {GAME_MODES.map(m => (
-            <button key={m.id} onClick={() => setFilterMode(m.id)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${filterMode === m.id ? 'bg-pink-600 text-white' : 'bg-purple-900/30 text-purple-400 border border-purple-700/30'}`}>
-              {m.name}
-            </button>
-          ))}
         </div>
 
-        {/* Room List */}
+        {/* Fixed Room Cards */}
         <div className="space-y-2">
-          {filteredRooms.length === 0 ? (
-            <div className="text-center py-16">
-              <Users size={48} className="text-purple-700 mx-auto mb-4" />
-              <p className="text-purple-400 font-bold uppercase tracking-wider">Keine offenen Räume</p>
-              <p className="text-purple-600 text-sm mt-2">Erstelle einen neuen Raum!</p>
-            </div>
-          ) : (
-            filteredRooms.map(room => {
-              const ModeIcon = MODE_ICONS[room.mode] || Zap;
-              const modeConfig = GAME_MODES.find(m => m.id === room.mode);
+          {filteredFixedRooms.map(room => {
+            const ModeIcon = MODE_ICONS[room.mode] || Zap;
+            const modeConfig = GAME_MODES.find(m => m.id === room.mode);
 
-              return (
-                <motion.div key={room.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-4 p-4 bg-purple-950/50 border border-purple-800/30 rounded-2xl hover:border-purple-600/50 transition-colors group cursor-pointer"
-                  onClick={() => joinRoom(room.room_code)}>
-                  {/* Mode Icon */}
-                  <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${modeConfig?.color || 'from-cyan-500 to-blue-600'} flex items-center justify-center shadow-lg`}>
-                    <ModeIcon size={18} className="text-white" />
-                  </div>
+            const status = fixedRoomStatus[room.channelName];
+            const playerCount = status?.count || 0;
+            const isPlaying = status?.playing || false;
 
-                  {/* Room Info */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-white font-bold text-sm">{room.name}</h3>
-                      {room.is_locked && <Lock size={11} className="text-yellow-400" />}
-                    </div>
-                    <p className="text-purple-500 text-xs font-bold">{modeConfig?.name || room.mode} — <span className="font-mono">{room.room_code}</span></p>
-                  </div>
+            return (
+              <motion.div key={room.channelName} whileHover={{ scale: 1.01 }}
+                onClick={() => joinFixedRoom(room)}
+                className={`flex items-center gap-4 p-4 bg-purple-950/50 border rounded-2xl hover:border-purple-500/50 cursor-pointer transition-all group ${
+                  playerCount > 0 ? 'border-purple-600/40' : 'border-purple-800/30'
+                }`}>
+                {/* Mode Icon */}
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${modeConfig?.color || 'from-cyan-500 to-blue-600'} flex items-center justify-center shadow-lg`}>
+                  <ModeIcon size={16} className="text-white" />
+                </div>
 
-                  {/* Player Count */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-900/30 rounded-lg border border-purple-700/30">
-                    <Users size={12} className="text-purple-400" />
-                    <span className="text-purple-300 font-black text-xs">{room.current_players}/{room.max_players}</span>
-                  </div>
+                {/* Room Info */}
+                <div className="flex-1">
+                  <h3 className="text-white font-bold text-sm">{room.displayName}</h3>
+                  <p className="text-purple-500 text-xs font-bold mt-0.5">
+                    {isPlaying ? '🎵 Spielt gerade...' : playerCount > 0 ? 'Wartet auf Spieler' : 'Leer'}
+                  </p>
+                </div>
 
-                  {/* Join Button */}
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={(e) => { e.stopPropagation(); joinRoom(room.room_code); }}
-                    className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-black uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(6,182,212,0.3)] opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    Beitreten
-                  </motion.button>
-                </motion.div>
-              );
-            })
-          )}
+                {/* Player Count */}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black ${
+                  playerCount > 0 ? 'bg-green-900/30 border border-green-500/30 text-green-400' : 'bg-purple-900/30 border border-purple-700/30 text-purple-500'
+                }`}>
+                  <Users size={12} />
+                  <span>{playerCount}/8</span>
+                </div>
+
+                {/* Join hint */}
+                <div className="flex items-center gap-1.5 text-cyan-400 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                  <LogIn size={12} />
+                  <span>Beitreten</span>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
 
@@ -1056,7 +1246,14 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
           </h3>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {onlinePlayers.map(p => (
-              <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-purple-900/30 transition-colors">
+              <div key={p.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-purple-900/30 transition-colors relative group"
+                onContextMenu={(e) => {
+                  if (p.id === userId) return;
+                  e.preventDefault();
+                  setContextMenu({ playerId: p.id, playerName: p.name, x: e.clientX, y: e.clientY });
+                }}
+              >
                 <Circle size={6} className="text-green-400 fill-green-400 flex-shrink-0" />
                 <span className={`text-xs font-bold truncate ${p.id === userId ? 'text-cyan-300' : 'text-purple-200'}`}>
                   {p.name} {p.id === userId && '(Du)'}
@@ -1068,6 +1265,45 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
               <p className="text-purple-600 text-xs text-center py-2">Niemand online</p>
             )}
           </div>
+
+          {/* Context Menu for online players */}
+          {contextMenu && (
+            <div
+              className="fixed z-[100] bg-purple-950 border border-purple-600/50 rounded-xl shadow-2xl py-1 min-w-[180px]"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
+              <button
+                onClick={async () => {
+                  try {
+                    // Check if already friends or pending
+                    const { data: existing } = await supabase.from('friendships')
+                      .select('id')
+                      .or(`and(user_id.eq.${userId},friend_id.eq.${contextMenu.playerId}),and(user_id.eq.${contextMenu.playerId},friend_id.eq.${userId})`)
+                      .maybeSingle();
+                    if (existing) {
+                      setContextMenu(null);
+                      return;
+                    }
+                    await supabase.from('friendships').insert({
+                      user_id: userId,
+                      friend_id: contextMenu.playerId,
+                      status: 'pending',
+                    });
+                  } catch {}
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-purple-200 hover:bg-purple-800/50 flex items-center gap-2"
+              >
+                <Users size={14} /> Freund hinzufügen
+              </button>
+              <button
+                onClick={() => setContextMenu(null)}
+                className="w-full text-left px-4 py-2 text-sm text-purple-400 hover:bg-purple-800/50"
+              >
+                Abbrechen
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Global Lobby Chat */}
@@ -1128,6 +1364,10 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', onGa
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="p-3 bg-purple-900/30 border border-purple-700/30 rounded-xl">
+                  <p className="text-purple-400 text-xs text-center">Teile den Code mit Freunden zum Beitreten!</p>
                 </div>
 
                 {createError && (

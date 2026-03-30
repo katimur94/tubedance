@@ -33,10 +33,24 @@ export function FriendsList({ userId, username, onBack, onInvite }: FriendsListP
   const [searchResults, setSearchResults] = useState<{ id: string; username: string; level: number; role: UserRole }[]>([]);
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'search'>('friends');
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    loadFriends();
-  }, [userId]);
+    supabase.auth.getSession().then(({ data }) => {
+      setIsAuthenticated(!!data.session);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadFriends();
+    } else {
+      setLoading(false);
+    }
+  }, [userId, isAuthenticated]);
 
   const loadFriends = async () => {
     setLoading(true);
@@ -86,35 +100,89 @@ export function FriendsList({ userId, username, onBack, onInvite }: FriendsListP
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username, level, role')
-      .ilike('username', `%${searchQuery}%`)
-      .neq('id', userId)
-      .limit(10);
-    setSearchResults((data || []).map((d: any) => ({ ...d, role: d.role || 'user' })));
+    if (!isAuthenticated) {
+      setError('Du musst angemeldet sein, um Freunde zu suchen.');
+      return;
+    }
+    setSearching(true);
+    setError(null);
+    try {
+      // Use RPC to search profiles, bypassing RLS restrictions on the profiles table.
+      // If the RPC doesn't exist, fall back to a direct query.
+      let results: any[] = [];
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('search_profiles', { search_term: searchQuery.trim(), current_user_id: userId });
+      if (rpcError) {
+        // Fallback: direct query (works if profiles has a permissive SELECT policy)
+        const { data, error: searchError } = await supabase
+          .from('profiles')
+          .select('id, username, level, role')
+          .ilike('username', `%${searchQuery.trim()}%`)
+          .neq('id', userId)
+          .limit(10);
+        if (searchError) throw searchError;
+        results = data || [];
+      } else {
+        results = rpcData || [];
+      }
+      setSearchResults(results.map((d: any) => ({ id: d.id, username: d.username, level: d.level ?? 1, role: d.role || 'user' })));
+      setHasSearched(true);
+    } catch (err: any) {
+      setError(err?.message || 'Suche fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   const sendRequest = async (targetId: string) => {
-    const { error } = await supabase.from('friendships').insert({
-      user_id: userId,
-      friend_id: targetId,
-      status: 'pending',
-    });
-    if (!error) {
+    if (!isAuthenticated) {
+      setError('Du musst angemeldet sein, um Freundschaftsanfragen zu senden.');
+      return;
+    }
+    setError(null);
+    try {
+      // Check if a friendship already exists in either direction
+      const { data: existing } = await supabase
+        .from('friendships')
+        .select('id')
+        .or(`and(user_id.eq.${userId},friend_id.eq.${targetId}),and(user_id.eq.${targetId},friend_id.eq.${userId})`);
+      if (existing && existing.length > 0) {
+        setError('Es besteht bereits eine Freundschaftsanfrage oder Freundschaft.');
+        return;
+      }
+      const { error: insertError } = await supabase.from('friendships').insert({
+        user_id: userId,
+        friend_id: targetId,
+        status: 'pending',
+      });
+      if (insertError) throw insertError;
       setSearchResults(prev => prev.filter(r => r.id !== targetId));
       loadFriends();
+    } catch (err: any) {
+      setError(err?.message || 'Freundschaftsanfrage konnte nicht gesendet werden.');
     }
   };
 
   const acceptRequest = async (friendshipId: string) => {
-    await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
-    loadFriends();
+    setError(null);
+    try {
+      const { error: updateError } = await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
+      if (updateError) throw updateError;
+      loadFriends();
+    } catch (err: any) {
+      setError(err?.message || 'Anfrage konnte nicht angenommen werden.');
+    }
   };
 
   const rejectRequest = async (friendshipId: string) => {
-    await supabase.from('friendships').delete().eq('id', friendshipId);
-    loadFriends();
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase.from('friendships').delete().eq('id', friendshipId);
+      if (deleteError) throw deleteError;
+      loadFriends();
+    } catch (err: any) {
+      setError(err?.message || 'Anfrage konnte nicht abgelehnt werden.');
+    }
   };
 
   const acceptedFriends = friends.filter(f => f.status === 'accepted');
@@ -166,9 +234,26 @@ export function FriendsList({ userId, username, onBack, onInvite }: FriendsListP
         ))}
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="relative z-20 mx-8 mt-4 px-4 py-3 bg-red-900/40 border border-red-500/40 rounded-xl text-red-300 text-sm font-bold flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-white transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       <div className="relative z-10 flex-1 overflow-y-auto px-8 py-6">
-        <AnimatePresence mode="wait">
+        {!isAuthenticated && (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Users size={48} className="text-purple-700 mb-4" />
+            <p className="text-purple-400 font-bold uppercase tracking-wider">Anmeldung erforderlich</p>
+            <p className="text-purple-600 text-sm mt-2">Du musst angemeldet sein, um die Freundesliste zu nutzen.</p>
+          </div>
+        )}
+        {isAuthenticated && <AnimatePresence mode="wait">
           {activeTab === 'friends' && (
             <motion.div key="friends" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {acceptedFriends.length === 0 ? (
@@ -263,6 +348,21 @@ export function FriendsList({ userId, username, onBack, onInvite }: FriendsListP
                 </button>
               </div>
 
+              {searching && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="text-purple-400 text-sm font-bold">Suche läuft...</p>
+                </div>
+              )}
+
+              {!searching && hasSearched && searchResults.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Search size={48} className="text-purple-700 mb-4" />
+                  <p className="text-purple-400 font-bold uppercase tracking-wider">Keine Spieler gefunden</p>
+                  <p className="text-purple-600 text-sm mt-2">Versuche einen anderen Suchbegriff.</p>
+                </div>
+              )}
+
               <div className="space-y-3">
                 {searchResults.map(user => {
                   const alreadyFriend = friends.some(f => f.friendId === user.id);
@@ -289,7 +389,7 @@ export function FriendsList({ userId, username, onBack, onInvite }: FriendsListP
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, Users, ArrowLeft, Shirt, LogOut, ShoppingBag, Coins, UserCircle, Heart, Trophy, Gift, ShieldAlert } from 'lucide-react';
 import Game from './components/Game';
@@ -35,6 +35,39 @@ const DEFAULT_PROFILE: PlayerProfile = {
   effect: 'none', accessory: 'none', body: DEFAULT_BODY, face: DEFAULT_FACE,
 };
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#1a0a2e] text-white flex flex-col items-center justify-center p-6">
+          <h1 className="text-3xl font-black mb-4 text-red-400">Etwas ist schiefgelaufen</h1>
+          <p className="text-gray-400 mb-6 max-w-md text-center">{this.state.error?.message || 'Ein unerwarteter Fehler ist aufgetreten.'}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-8 py-3 bg-pink-600 hover:bg-pink-500 rounded-full font-black uppercase tracking-widest text-sm transition-colors"
+          >
+            Neu laden
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [guestMode, setGuestMode] = useState(false);
@@ -42,6 +75,7 @@ export default function App() {
   const [view, setView] = useState<'menu' | 'mode_select' | 'playlist_single' | 'lobby' | 'locker' | 'shop' | 'wallet' | 'friends' | 'profile' | 'leaderboard' | 'admin' | 'game'>('menu');
   const [userRole, setUserRole] = useState<UserRole>('user');
   const [showDailyReward, setShowDailyReward] = useState(false);
+  const dailyCheckedRef = useRef(false);
   const [playlist, setPlaylist] = useState<any[]>([]);
   const [roomCode, setRoomCode] = useState<string>('');
   const [mode, setMode] = useState<'audition' | 'solo'>('audition');
@@ -61,28 +95,43 @@ export default function App() {
     return generated;
   });
 
+  const authInitializing = useRef(false);
+
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        setEconomyUserId(session.user.id);
-        // Load everything from Supabase FIRST (source of truth)
-        await loadWalletFromSupabase(session.user.id);
-        markWalletLoaded();
-        setWalletBeats(getLocalWallet().beats);
-        await fetchOnlineProfile(session.user.id);
+    const loadAuthData = async (session: any) => {
+      if (authInitializing.current) return;
+      authInitializing.current = true;
+      try {
+        setSession(session);
+        if (session?.user) {
+          setEconomyUserId(session.user.id);
+          await loadWalletFromSupabase(session.user.id);
+          markWalletLoaded();
+          setWalletBeats(getLocalWallet().beats);
+          await fetchOnlineProfile(session.user.id);
+        }
+      } finally {
+        authInitializing.current = false;
       }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      loadAuthData(session);
+    }).catch((err) => {
+      console.error('Failed to get session:', err);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_e, session) => {
-      setSession(session);
+      if (authInitializing.current) {
+        // Only update session state; skip duplicate data loading
+        setSession(session);
+        if (!session?.user) setEconomyUserId(null);
+        return;
+      }
       if (session?.user) {
-        setEconomyUserId(session.user.id);
-        await loadWalletFromSupabase(session.user.id);
-        markWalletLoaded();
-        setWalletBeats(getLocalWallet().beats);
-        await fetchOnlineProfile(session.user.id);
+        await loadAuthData(session);
       } else {
+        setSession(session);
         setEconomyUserId(null);
       }
     });
@@ -102,14 +151,19 @@ export default function App() {
       } else {
         setWalletBeats(getLocalWallet().beats);
       }
-      // Check if daily reward is available
-      const dailyState = localStorage.getItem('tubedance_daily_login');
-      if (dailyState) {
-        const parsed = JSON.parse(dailyState);
-        const today = new Date().toISOString().split('T')[0];
-        if (parsed.lastClaim !== today) setShowDailyReward(true);
-      } else {
-        setShowDailyReward(true);
+      // Check if daily reward is available (only once per session, on first menu visit)
+      if (view === 'menu' && !dailyCheckedRef.current) {
+        dailyCheckedRef.current = true;
+        const dailyState = localStorage.getItem('tubedance_daily_login');
+        if (dailyState) {
+          try {
+            const parsed = JSON.parse(dailyState);
+            const today = new Date().toISOString().split('T')[0];
+            if (parsed.lastClaim !== today) setShowDailyReward(true);
+          } catch { /* corrupted localStorage */ }
+        } else {
+          setShowDailyReward(true);
+        }
       }
     }
   }, [view]);
@@ -224,12 +278,15 @@ export default function App() {
     }
   };
 
-  const handleMultiplayerStart = async (code: string, playlistId: string | null, roomGameMode?: GameMode, songs?: any[]) => {
+  const [liveJoin, setLiveJoin] = useState(false);
+  const [gameStartedAt, setGameStartedAt] = useState(0);
+  const handleMultiplayerStart = async (code: string, playlistId: string | null, roomGameMode?: GameMode, songs?: any[], isLiveJoin?: boolean, startedAt?: number) => {
     setRoomCode(code);
     setMode('audition');
+    setLiveJoin(!!isLiveJoin);
+    setGameStartedAt(startedAt || (isLiveJoin ? 0 : Date.now()));
     if (roomGameMode) setGameMode(roomGameMode);
     if (songs && songs.length > 0) {
-      // Songs passed directly from RoomBrowser (Leader's selection)
       setPlaylist(songs);
     } else if (playlistId) {
       const { data } = await supabase.from('playlist_songs').select('*').eq('playlist_id', playlistId).order('position');
@@ -267,58 +324,66 @@ export default function App() {
       setWalletBeats(getLocalWallet().beats);
     }
 
-    // Update game stats + leaderboard + achievements in DB
+    // Update game stats + leaderboard + achievements in DB (non-blocking)
     const uid = session?.user?.id;
     if (uid) {
       const gameScore = finalScore || earnedExp * 10;
       const gameCombo = maxCombo || 0;
       const gameSongs = songCount || 1;
 
-      // 1. Update profile stats
-      const { data: currentProfile } = await supabase.from('profiles')
-        .select('total_games, highest_combo, win_count, total_earned')
-        .eq('id', uid).maybeSingle();
+      // Fire-and-forget: DB updates should not block navigation
+      (async () => {
+        try {
+          const { data: currentProfile } = await supabase.from('profiles')
+            .select('total_games, highest_combo, win_count, total_earned')
+            .eq('id', uid).maybeSingle();
 
-      const prevGames = currentProfile?.total_games || 0;
-      const prevCombo = currentProfile?.highest_combo || 0;
-      const prevEarned = currentProfile?.total_earned || 0;
-      const newTotalGames = prevGames + 1;
-      const newHighestCombo = Math.max(prevCombo, gameCombo);
-      const newTotalEarned = prevEarned + beatsEarned;
+          const prevGames = currentProfile?.total_games || 0;
+          const prevCombo = currentProfile?.highest_combo || 0;
+          const prevEarned = currentProfile?.total_earned || 0;
+          const newTotalGames = prevGames + 1;
+          const newHighestCombo = Math.max(prevCombo, gameCombo);
+          const newTotalEarned = prevEarned + beatsEarned;
 
-      await supabase.from('profiles').update({
-        total_games: newTotalGames,
-        highest_combo: newHighestCombo,
-        total_earned: newTotalEarned,
-      }).eq('id', uid);
+          await supabase.from('profiles').update({
+            total_games: newTotalGames,
+            highest_combo: newHighestCombo,
+            total_earned: newTotalEarned,
+          }).eq('id', uid);
 
-      // 2. Update leaderboard — read existing score first, then add
-      const { data: existingLb } = await supabase.from('leaderboard')
-        .select('total_score')
-        .eq('user_id', uid)
-        .maybeSingle();
-      const prevScore = existingLb?.total_score || 0;
+          const { data: existingLb } = await supabase.from('leaderboard')
+            .select('total_score')
+            .eq('user_id', uid)
+            .maybeSingle();
+          const prevScore = existingLb?.total_score || 0;
 
-      await supabase.from('leaderboard').upsert({
-        user_id: uid,
-        username: username,
-        total_score: prevScore + gameScore,
-        total_games: newTotalGames,
-        highest_combo: newHighestCombo,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
+          await supabase.from('leaderboard').upsert({
+            user_id: uid,
+            username: username,
+            total_score: prevScore + gameScore,
+            total_games: newTotalGames,
+            highest_combo: newHighestCombo,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
 
-      // 3. Check and unlock achievements
-      checkAchievements(uid, {
-        totalGames: newTotalGames,
-        highestCombo: newHighestCombo,
-        totalEarned: newTotalEarned,
-        songCount: gameSongs,
-      });
+          checkAchievements(uid, {
+            totalGames: newTotalGames,
+            highestCombo: newHighestCombo,
+            totalEarned: newTotalEarned,
+            songCount: gameSongs,
+          });
+        } catch (err) {
+          console.warn('[App] Failed to save game stats:', err);
+        }
+      })();
     }
 
-    // Return to lobby if multiplayer, otherwise menu
+    // Navigate immediately — don't wait for DB updates
     if (mode === 'audition') {
+      // Reset room to "waiting" so players can rejoin (only for custom rooms, not fixed)
+      if (roomCode && !roomCode.startsWith('fixed:')) {
+        supabase.from('game_rooms').update({ is_playing: false }).eq('room_code', roomCode).then(() => {}, () => {});
+      }
       setView('lobby');
     } else {
       setView('menu');
@@ -366,6 +431,7 @@ export default function App() {
   const requireAuth = !session && !guestMode;
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-[#1a0a2e] text-white font-sans selection:bg-pink-500/30 flex flex-col items-center justify-center p-6 relative overflow-x-hidden">
 
       {/* Audition-style animated background */}
@@ -410,7 +476,7 @@ export default function App() {
              </div>
           )}
 
-          {view !== 'menu' && view !== 'game' && view !== 'locker' && view !== 'shop' && view !== 'wallet' && view !== 'mode_select' && (
+          {view !== 'menu' && view !== 'game' && view !== 'locker' && view !== 'shop' && view !== 'wallet' && view !== 'mode_select' && view !== 'lobby' && (
             <button 
               onClick={() => setView('menu')}
               className="absolute top-6 left-6 z-50 flex items-center gap-2 px-6 py-3 bg-gray-900 border border-cyan-500/50 rounded-full hover:bg-cyan-900/50 transition-colors uppercase tracking-widest text-xs font-black shadow-[0_0_15px_rgba(6,182,212,0.2)]"
@@ -589,8 +655,9 @@ export default function App() {
                   username={username}
                   profile={profile}
                   userRole={userRole}
+                  rejoinRoomCode={mode === 'audition' ? roomCode : null}
                   onGameStart={handleMultiplayerStart}
-                  onBack={() => setView('menu')}
+                  onBack={() => { setRoomCode(''); setView('menu'); }}
                 />
               </motion.div>
             )}
@@ -655,6 +722,8 @@ export default function App() {
                 userId={session?.user?.id || getDeviceId()}
                 username={username}
                 profile={profile}
+                liveJoin={liveJoin}
+                gameStartedAt={gameStartedAt}
                 onBack={() => setView(mode === 'audition' ? 'lobby' : 'menu')}
                 onGameEnd={handleGameEnd}
               />
@@ -663,5 +732,6 @@ export default function App() {
         </>
       )}
     </div>
+    </ErrorBoundary>
   );
 }

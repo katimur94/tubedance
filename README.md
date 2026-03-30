@@ -9,46 +9,61 @@
 [![Three.js](https://img.shields.io/badge/Three.js-0.183-000000?logo=threedotjs&logoColor=white&style=flat-square)](https://threejs.org/)
 [![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white&style=flat-square)](https://supabase.com/)
 
-**Live:** [https://tubedance.netlify.app](https://tubedance.netlify.app) <!-- Update with actual Netlify URL -->
+**Live:** [https://tubedance.netlify.app](https://tubedance.netlify.app)
 
 ---
 
 ## Features
 
-### Gameplay
-- **Beat Up Mode** - Klassischer Audition-Modus: Pfeile merken, eingeben, im Takt bestaetigen
-- **Beat Rush Mode** - DDR/StepMania-Stil mit fallenden Pfeilen
-- **Freestyle Mode** - Freie Kombos mit Jury-Bewertung
-- **50+ Songs** in 5 Schwierigkeitsstufen (60-200+ BPM)
+### Spielmodi
+
+| Modus | Beschreibung |
+|-------|-------------|
+| **Beat Up** | Klassischer Audition-Modus: Pfeilsequenz merken, eingeben und im Takt mit der Leertaste bestaetigen. Finish Moves nach erfolgreichen Runden. |
+| **Beat Rush** | DDR/StepMania-Stil mit fallenden Pfeilen in 4 Spalten. Timing-Fenster: Perfect (30ms), Great (60ms), Cool (100ms), Bad (150ms). |
+| **Freestyle** | Freie Kombos mit Beat-Timing und Jury-Bewertung. Variety-Multiplier belohnt Abwechslung in den Richtungen. |
+| **Club Dance** | Kooperativer Modus (in Vorbereitung). |
 
 ### Multiplayer
-- Echtzeit-PvP Battle mit Live-Avataren auf der Buehne
-- Raum-Browser mit Quick Join und Raum-Code
-- Leader-System (Krone weitergeben, Spieler kicken, Raum schliessen)
-- Song/Playlist-Auswahl durch den Leader
-- Synchronisierter Countdown und Spielstart
-- Hit-Ratings (Perfect/Great/Cool/Bad/Miss) live sichtbar fuer alle
-- Echtzeit-Chat mit Emotes
 
-### 3D Avatare
-- Prozeduraler 3D-Avatar mit Skelett-Animation (Three.js / React Three Fiber)
-- 50+ Kleidungsstuecke und Effekte (Jacken, Schuhe, Fluegel, Auren, ...)
-- Ready Player Me Integration fuer eigene Avatare
-- Rarity-System: Common, Rare, Epic, Legendary
-- Super Saiyajin Aura mit SSJ-Frisur und Blitz-Effekten (Admin-exklusiv)
+- **20 feste Raeume** (5 pro Spielmodus) — immer verfuegbar, keine Erstellung noetig
+- **Private Raeume** — eigenen Raum erstellen und Code an Freunde weitergeben
+- **Live-Join** — laufendem Spiel beitreten, Musik wird automatisch zur aktuellen Position synchronisiert
+- **Score-Persistenz** — beim Verlassen und Wiedereintreten bleibt der Score erhalten
+- **Leader-System** — der am laengsten anwesende Spieler ist Leader (Song-Auswahl, Spieler kicken, Krone weitergeben)
+- **Echtzeit-Avatare** — alle Spieler sehen sich gegenseitig mit Live-Hit-Ratings und Combos auf der Buehne
+- **Chat mit Emotes** — Echtzeit-Chat in jedem Raum und in der globalen Lobby
+- **Synchronisierter Start** — automatischer Countdown wenn alle Spieler bereit sind (nur im Multiplayer)
 
-### Wirtschaft & Fortschritt
-- **Beats** (Waehrung) verdient durch Gameplay
-- Fashion Shop mit Live-3D-Vorschau
-- Daily Rewards mit Streak-System
-- Level-System mit EXP
-- 10 Achievements mit Fortschrittsbalken
-- Globale Rangliste (Top 100)
-- Alles serverseitig in Supabase gespeichert (kein localStorage-Verlust)
+### 3D-Avatare
 
-### Rollen
-- User, Supporter, Moderator, Gamemaster, Admin
-- Admins: Alle Items freigeschaltet, unendlich Beats, Level 999, SSJ-Aura
+- **Prozeduraler 3D-Avatar** mit Skelett-Animation (Three.js / React Three Fiber)
+- **50+ Kleidungsstuecke und Effekte** — Jacken, Schuhe, Hosen, Fluegel, Auren, Brillen und mehr
+- **Ready Player Me Integration** — eigene Avatare importieren
+- **Rarity-System** — Common, Rare, Epic, Legendary mit visuellen Glow-Effekten
+- **Super Saiyajin Aura** mit SSJ-Frisur und Blitz-Effekten (Admin-exklusiv)
+- **Automatische Material-Bereinigung** — GPU-Speicher wird beim Komponentenwechsel freigegeben
+
+### Wirtschaft und Fortschritt
+
+- **Beats** (Waehrung) — verdient durch Gameplay, ausgegeben im Fashion Shop
+- **Fashion Shop** — 30+ Items mit Live-3D-Vorschau, Rarity-Filter und Sale-System
+- **Daily Rewards** — 7-Tage-Belohnungszyklus mit Streak-System (serverseitig validiert)
+- **Level-System** — EXP durch Gameplay, automatischer Level-Up
+- **10 Achievements** — mit Fortschrittsbalken und automatischem Unlock
+- **Globale Rangliste** — Top 100 mit Wochen-/Monatsfilter
+- **Freundesliste** — Spieler suchen, Anfragen senden, Rechtsklick-Menue in der Lobby
+- **Serverseitige Persistenz** — Wallet, Items und Fortschritt in Supabase gespeichert
+
+### Rollen-System
+
+| Rolle | Rechte |
+|-------|--------|
+| User | Standard-Spieler |
+| Supporter | Spezielles Badge |
+| Moderator | Spieler verwalten |
+| Gamemaster | Erweiterte Verwaltung |
+| Admin | Alle Items, unendlich Beats, Level 999, SSJ-Aura, Admin-Panel |
 
 ---
 
@@ -56,22 +71,23 @@
 
 | Bereich | Technologie |
 |---------|-------------|
-| Frontend | React 19, TypeScript, Vite 6 |
-| 3D | Three.js 0.183, @react-three/fiber 9, @react-three/drei 10 |
-| Backend | Supabase (Auth, PostgreSQL, Realtime, Storage) |
+| Frontend | React 19, TypeScript 5.8, Vite 6 |
+| 3D-Engine | Three.js 0.183, @react-three/fiber 9, @react-three/drei 10 |
+| Backend | Supabase (Auth, PostgreSQL, Realtime Presence/Broadcast, Storage) |
 | Styling | Tailwind CSS 4 |
 | Animation | Motion (framer-motion Nachfolger) |
 | Audio | YouTube (react-youtube) + Web Audio API |
-| Avatare | Ready Player Me + Procedural 3D Fallback |
-| Deployment | Netlify |
+| Avatare | Ready Player Me + Prozeduraler 3D-Fallback |
+| Deployment | Netlify (PWA) |
 
 ---
 
 ## Setup
 
 ### Voraussetzungen
+
 - Node.js 18+
-- Supabase-Projekt ([supabase.com](https://supabase.com))
+- Ein Supabase-Projekt ([supabase.com](https://supabase.com))
 
 ### Installation
 
@@ -83,30 +99,46 @@ npm install
 
 ### Environment Variables
 
-Erstelle `.env` im Root:
+Erstelle `.env` im Root-Verzeichnis:
 
 ```env
 VITE_SUPABASE_URL=https://dein-projekt.supabase.co
 VITE_SUPABASE_ANON_KEY=dein-anon-key
 ```
 
-### Datenbank
+### Datenbank-Migrationen
+
+Alle SQL-Dateien muessen der Reihe nach ausgefuehrt werden:
 
 ```bash
 # Option A: Supabase CLI
 supabase db push
 
-# Option B: Supabase Dashboard -> SQL Editor
-# Inhalt von supabase/migrations/001_economy_and_social.sql einfuegen und ausfuehren
+# Option B: Manuell im Supabase Dashboard -> SQL Editor
+# Dateien der Reihe nach einfuegen und ausfuehren:
 ```
+
+| Migration | Inhalt |
+|-----------|--------|
+| `001_economy_and_social.sql` | Basis-Schema: Profiles, Shop, Coins, Friendships, Crews, Achievements, Leaderboard, Game Rooms |
+| `002_sync_columns.sql` | Zusaetzliche Profil-Spalten (Kleidung, Transaktionen, Daily Login) |
+| `003_user_roles.sql` | Rollen-System + Admin-RPC-Funktionen |
+| `004_claim_daily_reward_rpc.sql` | Serverseitige Daily-Reward-Validierung (JSONB) |
+| `005_missing_tables_and_indexes.sql` | Fehlende Spalten (Leaderboard username, daily_login_json JSONB), RLS-Policies, Performance-Indexes |
+| `006_friends_search_and_delete.sql` | Freunde-Suche RPC, fehlende DELETE-Policy fuer Friendships |
 
 ### Entwicklung
 
 ```bash
-npm run dev        # Dev-Server (http://localhost:5173)
+npm run dev        # Dev-Server starten
 npm run build      # Production Build
-npx tsc --noEmit   # Type-Check
+npx tsc --noEmit   # Type-Check (3 bekannte Fehler in Avatar.tsx + supabase.ts)
 ```
+
+### Bekannte TypeScript-Fehler (harmlos)
+
+- `src/components/Avatar.tsx(61,7)` — Variants-Typ-Inkompatibilitaet mit motion/react
+- `src/lib/supabase.ts(3,33)` und `(4,33)` — `Property 'env' does not exist on type 'ImportMeta'` (Vite env type)
 
 ---
 
@@ -114,29 +146,54 @@ npx tsc --noEmit   # Type-Check
 
 ```
 src/
-├── App.tsx                     # Haupt-App mit View-Router
-├── types/gameTypes.ts          # GameMode, HitRating, LetterGrade
+├── App.tsx                         # Haupt-App mit View-Router und Error Boundary
+├── types/gameTypes.ts              # GameMode, HitRating, LetterGrade, GAME_MODES
 ├── lib/
-│   ├── supabase.ts             # Supabase Client
-│   ├── economy.ts              # Wallet, Shop (50+ Items), Supabase-Sync
-│   └── roles.ts                # Rollen-System (User bis Admin)
+│   ├── supabase.ts                 # Supabase Client mit Timeout-gesichertem Fetch
+│   ├── economy.ts                  # Wallet, Shop-Katalog (30+ Items), Server-Sync
+│   └── roles.ts                    # Rollen-System (User bis Admin)
+├── systems/
+│   └── AnimationSystem.ts          # Singleton AnimationCache, AvatarAnimationController
+├── utils/
+│   └── audio.ts                    # SoundEngine, BeatScheduler, AudioAnalyzer
 ├── components/
-│   ├── Game.tsx                # Game Controller + Multiplayer Battle-Stage
-│   ├── RoomBrowser.tsx         # Multiplayer Lobby + Raum-Management
-│   ├── AnimatedAvatar.tsx      # 3D Avatar mit Skelett-Animation + SSJ-Aura
-│   ├── FashionShop.tsx         # Item-Shop mit Live-3D-Preview
-│   ├── PlayerProfile.tsx       # Profil, Stats, Achievements mit Fortschritt
-│   ├── Leaderboard.tsx         # Top 100 Rangliste
-│   ├── Chat.tsx                # Echtzeit-Chat (Supabase Broadcast)
-│   ├── DailyRewards.tsx        # 7-Tage Belohnungszyklus
+│   ├── Game.tsx                    # Game Controller, Multiplayer Battle-Stage, Live-Join, Score-Persistenz
+│   ├── RoomBrowser.tsx             # 20 feste Raeume, Private Raeume, Presence-basiertes Leader-System
+│   ├── AnimatedAvatar.tsx          # 3D Avatar mit Skelett-Animation + Procedural Fallback
+│   ├── FashionShop.tsx             # Fashion Shop mit Rarity-Filter und Live-3D-Preview
+│   ├── PlayerProfile.tsx           # Profil mit Stats, Achievements, 3D-Avatar-Preview
+│   ├── Leaderboard.tsx             # Top 100 Rangliste mit Zeitfiltern
+│   ├── FriendsList.tsx             # Freunde suchen, Anfragen, Duplikat-Pruefung
+│   ├── Chat.tsx                    # Supabase Realtime Broadcast Chat + Emotes
+│   ├── DailyRewards.tsx            # 7-Tage Belohnungszyklus (Server-validiert)
+│   ├── WalletView.tsx              # Beats-Guthaben + Transaktionshistorie
+│   ├── Auth.tsx                    # Login/Register + Gastmodus
 │   └── modes/
-│       ├── BeatUpMode.tsx      # Klassischer Audition-Modus + Finish Move
-│       ├── BeatRushMode.tsx    # DDR-Stil (fallende Pfeile)
-│       └── FreestyleMode.tsx   # Freestyle mit Beat-Timing
+│       ├── BeatUpMode.tsx          # Klassischer Audition-Modus + Finish Move
+│       ├── BeatRushMode.tsx        # DDR-Stil mit fallenden Pfeilen
+│       └── FreestyleMode.tsx       # Freestyle mit Variety-Multiplier
 supabase/
-└── migrations/
-    └── 001_economy_and_social.sql
+└── migrations/                     # 6 SQL-Migrationen (siehe oben)
 ```
+
+---
+
+## Architektur-Highlights
+
+### Multiplayer-Synchronisation
+
+- **Feste Raeume**: 20 Presence-basierte Raeume ohne Datenbank-Eintraege — rein ueber Supabase Realtime Channels
+- **Leader-Wahl**: Aeltester anwesender Spieler wird automatisch Leader (nach `joined_at` sortiert)
+- **Live-Join**: Neue Spieler berechnen ihre YouTube-Seek-Position aus dem `gameStartedAt`-Timestamp — alle hoeren die gleiche Musik
+- **Drift-Korrektur**: `onStateChange`-Handler korrigiert YouTube-Buffering-Drift automatisch (>2s)
+- **Score-Persistenz**: `sessionStorage` speichert Score/Combo/HitCounts pro Raum — bleibt beim Verlassen und Wiedereintreten erhalten
+- **Spieler-Announce**: Beim Channel-Subscribe broadcasten alle Spieler ihren Status, neue Spieler senden `player_announce_request`
+
+### Sicherheit
+
+- **Economy**: Server ist die Quelle der Wahrheit — kein `Math.max`-Exploit, serverseitige Daily-Reward-Validierung via RPC
+- **RLS-Policies**: Alle Tabellen mit Row Level Security geschuetzt
+- **Fetch-Timeout**: 10s-Timeout auf alle Supabase-Requests mit kombiniertem Signal-Handling
 
 ---
 
