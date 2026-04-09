@@ -119,12 +119,14 @@ class AnimationCache {
             resolve(clip);
           } else {
             console.warn(`[AnimationSystem] ⚠️ "${path}" enthält keine Animationen`);
+            this.loadPromises.delete(style);
             resolve(null);
           }
         },
         undefined,
         () => {
           console.warn('[AnimationSystem] Failed to load:', path);
+          this.loadPromises.delete(style);
           resolve(null);
         }
       );
@@ -265,8 +267,11 @@ export class AvatarAnimationController {
 
   dispose() {
     this.mixer.stopAllAction();
+    this.actions.forEach(action => {
+      this.mixer.uncacheAction(action.getClip());
+      this.mixer.uncacheClip(action.getClip());
+    });
     this.actions.clear();
-    this.mixer.uncacheRoot(this.mixer.getRoot());
   }
 }
 

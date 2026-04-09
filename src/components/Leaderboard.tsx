@@ -99,6 +99,7 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
       }
 
       if (profileData) {
+        let foundRank: number | null = null;
         const mapped = profileData
           .filter((p: any) => (p.total_games || 0) > 0)
           .map((p: any, i: number) => {
@@ -112,10 +113,11 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
               level: p.level || 1,
               role: p.role || 'user',
             };
-            if (p.id === userId) setMyRank(i + 1);
+            if (p.id === userId) foundRank = i + 1;
             return entry;
           });
         setEntries(mapped);
+        if (foundRank !== null) setMyRank(foundRank);
       }
     } else {
       // Leaderboard data found — enrich with profile info
@@ -130,6 +132,7 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
 
       const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
+      let foundRank2: number | null = null;
       const mapped = data.map((e: any, i: number) => {
         const prof = profileMap.get(e.user_id);
         const entry: LeaderboardEntry = {
@@ -142,10 +145,11 @@ export function Leaderboard({ userId, onBack }: LeaderboardProps) {
           level: prof?.level || 1,
           role: prof?.role || 'user',
         };
-        if (e.user_id === userId) setMyRank(i + 1);
+        if (e.user_id === userId) foundRank2 = i + 1;
         return entry;
       });
       setEntries(mapped);
+      if (foundRank2 !== null) setMyRank(foundRank2);
     }
 
     setLoading(false);

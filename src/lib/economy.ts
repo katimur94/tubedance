@@ -243,6 +243,7 @@ export function purchaseItem(itemId: string): { success: boolean; error?: string
 }
 
 export function earnBeats(amount: number, reason: string) {
+  if (amount <= 0) return;
   const wallet = getLocalWallet();
   wallet.beats += amount;
   wallet.totalEarned += amount;
@@ -265,8 +266,11 @@ export async function syncWalletToSupabase(userId: string) {
     // Read server values first so we never overwrite gifts/admin changes
     const { data: server } = await supabase.from('profiles').select(CORE_WALLET_COLS).eq('id', userId).single();
 
-    const mergedBeats = Math.max(wallet.beats, server?.coins ?? 0);
-    const mergedDiamonds = Math.max(wallet.diamonds, server?.diamonds ?? 0);
+    // Server is authoritative for currency to prevent duplication exploits
+    // Only use local values if server has no data yet (fresh account)
+    const serverHasData = server && server.coins !== null && server.coins !== undefined;
+    const mergedBeats = serverHasData ? server.coins : wallet.beats;
+    const mergedDiamonds = serverHasData ? server.diamonds ?? 0 : wallet.diamonds;
     const mergedEarned = Math.max(wallet.totalEarned, server?.total_earned ?? 0);
     const mergedSpent = Math.max(wallet.totalSpent, server?.total_spent ?? 0);
 

@@ -63,7 +63,7 @@ export function SequenceInput({ onSequenceComplete, resetTrigger }: SequenceInpu
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sequence, currentIndex]);
+  }, [sequence, currentIndex, onSequenceComplete]);
 
   const renderIcon = (dir: Direction, index: number) => {
     const Icon = dir === 'Up' ? ArrowUp : dir === 'Down' ? ArrowDown : dir === 'Left' ? ArrowLeft : ArrowRight;

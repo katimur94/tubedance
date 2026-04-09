@@ -59,7 +59,7 @@ function isYesterday(dateStr: string): boolean {
 }
 
 export function DailyRewards({ onClose }: DailyRewardsProps) {
-  const [state, setState] = useState<DailyState>(getDailyState);
+  const [state, setState] = useState<DailyState>(() => getDailyState());
   const [claimed, setClaimed] = useState(false);
   const [rewardAmount, setRewardAmount] = useState(0);
 

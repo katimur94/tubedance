@@ -147,7 +147,7 @@ export default function App() {
       if (uid) {
         syncWalletFromServer(uid).then(() => {
           setWalletBeats(getLocalWallet().beats);
-        });
+        }).catch((err) => console.warn('[App] wallet sync failed:', err));
       } else {
         setWalletBeats(getLocalWallet().beats);
       }
@@ -169,7 +169,14 @@ export default function App() {
   }, [view]);
 
   const fetchOnlineProfile = async (uid: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
+    let data: any = null;
+    try {
+      const result = await supabase.from('profiles').select('*').eq('id', uid).single();
+      data = result.data;
+    } catch (err) {
+      console.warn('[App] fetchOnlineProfile failed:', err);
+      return;
+    }
     if (data) {
       const p: PlayerProfile = {
         ...DEFAULT_PROFILE,

@@ -103,8 +103,11 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
 
   // Clean up old arrows (missed or hit)
   const missedCountRef = useRef(0);
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => {
     const cleanup = setInterval(() => {
+      if (!isPlayingRef.current) return;
       const now = performance.now();
       missedCountRef.current = 0;
 
@@ -137,6 +140,8 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
 
   // Keyboard handler
   useEffect(() => {
+    if (!isPlaying) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const colIndex = COLUMNS.findIndex(c => c.key === e.key);
       if (colIndex === -1) return;
@@ -194,7 +199,7 @@ export function BeatRushMode({ bpm, onHit, onMiss, isPlaying }: BeatRushModeProp
       window.removeEventListener('keyup', handleKeyUp);
       if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
-  }, [onHit]);
+  }, [onHit, isPlaying]);
 
   return (
     <div className="relative w-full max-w-lg mx-auto h-[70vh] overflow-hidden">

@@ -39,14 +39,19 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
     };
   }, [bpm]);
 
+  const lockedRef = useRef(locked);
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
+  const onHitRef = useRef(onHit);
+  useEffect(() => { onHitRef.current = onHit; }, [onHit]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
-        if (locked) {
+        if (lockedRef.current) {
            setFeedback('PFEILE!');
            setTimeout(() => setFeedback(null), 800);
-           onHit('LOCKED');
+           onHitRef.current('LOCKED');
            return;
         }
         evaluateHit();
@@ -54,7 +59,7 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [bpm, locked]);
+  }, [bpm]);
 
   const evaluateHit = () => {
     const pos = positionRef.current;
@@ -73,7 +78,7 @@ export function SyncBar({ bpm, onHit, locked }: SyncBarProps) {
     setFeedback(result);
     setTimeout(() => setFeedback(null), 800);
 
-    onHit(result);
+    onHitRef.current(result);
   };
 
   return (

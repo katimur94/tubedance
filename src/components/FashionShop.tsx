@@ -66,7 +66,7 @@ interface FashionShopProps {
 }
 
 export function FashionShop({ playerLevel, profile, onBack }: FashionShopProps) {
-  const [wallet, setWallet] = useState<WalletState>(getLocalWallet);
+  const [wallet, setWallet] = useState<WalletState>(() => getLocalWallet());
   const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set(getOwnedItems().map(o => o.itemId)));
   const [category, setCategory] = useState<Category>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');

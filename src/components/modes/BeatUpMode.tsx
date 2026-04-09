@@ -49,6 +49,7 @@ export function BeatUpMode({ bpm, onHit, onMiss, combo, round }: BeatUpModeProps
   const [showGrade, setShowGrade] = useState<LetterGrade | null>(null);
   const [successfulRounds, setSuccessfulRounds] = useState(0);
   const errorTimeoutRef = useRef<any>(null);
+  const gradeTimeoutRef = useRef<any>(null);
   const isFinishMove = successfulRounds > 0 && successfulRounds % 4 === 0;
 
   const resetSequence = useCallback(() => {
@@ -129,7 +130,8 @@ export function BeatUpMode({ bpm, onHit, onMiss, combo, round }: BeatUpModeProps
 
     const grade = getLetterGrade(avgAccuracy);
     setShowGrade(grade);
-    setTimeout(() => setShowGrade(null), 1500);
+    if (gradeTimeoutRef.current) clearTimeout(gradeTimeoutRef.current);
+    gradeTimeoutRef.current = setTimeout(() => setShowGrade(null), 1500);
 
     setSuccessfulRounds(s => s + 1);
     resetSequence();

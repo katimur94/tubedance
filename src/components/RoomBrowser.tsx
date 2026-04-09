@@ -245,7 +245,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
 
     return () => {
       mountedRef.current = false;
-      supabase.removeChannel(lobbyChannel);
+      lobbyChannel.unsubscribe().then(() => supabase.removeChannel(lobbyChannel));
     };
   }, []);
 
@@ -667,7 +667,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
         const nextPlayer = players.find(p => p.id !== userId);
         if (nextPlayer) {
           if (currentInRoom) {
-            supabase.from('game_rooms').update({ host_id: nextPlayer.id }).eq('room_code', currentInRoom).then(() => {}, () => {});
+            supabase.from('game_rooms').update({ host_id: nextPlayer.id }).eq('room_code', currentInRoom).then(() => {}, (err: any) => console.warn('[RoomBrowser] crown transfer failed:', err));
           }
           channelToRemove.send({
             type: 'broadcast',

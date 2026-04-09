@@ -15,7 +15,7 @@ interface WalletViewProps {
 }
 
 export function WalletView({ onBack, onOpenShop }: WalletViewProps) {
-  const [wallet, setWallet] = useState<WalletState>(getLocalWallet);
+  const [wallet, setWallet] = useState<WalletState>(() => getLocalWallet());
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [ownedCount, setOwnedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<'overview' | 'history'>('overview');
@@ -31,7 +31,8 @@ export function WalletView({ onBack, onOpenShop }: WalletViewProps) {
   const recentTx = transactions.slice(0, 20);
 
   // Stats — defensive: avoid NaN / Infinity when no transactions exist or timestamps are invalid
-  const oldestTimestamp = transactions.length > 0 ? transactions.at(-1)?.timestamp : undefined;
+  const lastTx = transactions.length > 0 ? transactions[transactions.length - 1] : undefined;
+  const oldestTimestamp = lastTx?.timestamp;
   const hoursSinceFirst = oldestTimestamp && Number.isFinite(oldestTimestamp)
     ? Math.max(1, Math.floor((Date.now() - oldestTimestamp) / (1000 * 60 * 60)))
     : 1;

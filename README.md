@@ -197,6 +197,43 @@ supabase/
 
 ---
 
+## Changelog
+
+### 2026-04-10 — Umfassender Bug-Fix (33 Fixes)
+
+**Kritisch**
+- Waehrungs-Duplikations-Exploit in `syncWalletToSupabase` geschlossen (Server ist jetzt autoritativ fuer Coins/Diamonds)
+- `earnBeats()` lehnt negative Betraege ab
+- Supabase Realtime Memory Leaks gefixt: `channel.unsubscribe()` vor `removeChannel()` in Game.tsx und RoomBrowser.tsx
+- Crash bei leeren Transaktionen in WalletView behoben
+- Achievements zeigen echte Daten (owned items, friends count) statt hardcoded 0
+
+**Gameplay**
+- `sync_countdown` Event-Listener wird einmal registriert statt bei jedem Re-Render (keine doppelten Countdowns mehr)
+- BeatRush: Keyboard-Events und Miss-Zaehlung nur aktiv wenn `isPlaying === true`
+- Freestyle: Jury-Score verliert Punkte bei Miss (statt nur zu steigen)
+- SyncBar: Stale Closures fuer `locked` und `onHit` via Refs gefixt
+- BeatUpMode: Grade-Timeout korrekt aufgeraeumt
+- SequenceInput: `onSequenceComplete` in Dependency-Array
+- Leaderboard: `setMyRank` aus `.map()` herausgezogen
+
+**Initialisierung**
+- `useState(fn)` zu `useState(() => fn())` in DailyRewards, FashionShop, WalletView
+
+**Fehlerbehandlung**
+- `fetchOnlineProfile` in try-catch gewrappt
+- `syncWalletFromServer` Promise mit `.catch()`
+- Crown-Transfer Fehler werden geloggt statt verschluckt
+
+**Audio & Animation**
+- `AutoBPMDetector` raeumt AudioContext nach Timeout/Completion auf
+- `AudioAnalyzer.destroy()` korrekte Disconnect-Reihenfolge
+- `playHit()` akzeptiert jetzt auch `'cool'` (Type-Mismatch mit gameTypes behoben)
+- Fehlgeschlagene Animation-Loads werden aus dem Promise-Cache entfernt (Retry moeglich)
+- `AvatarAnimationController.dispose()` nutzt korrekte THREE.js API statt nicht-existentem `uncacheRoot`
+
+---
+
 ## Screenshots
 
 *Coming soon*

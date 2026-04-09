@@ -11,26 +11,33 @@ import { type UserRole } from '../lib/roles';
 import { RoleBadge } from './RoleBadge';
 import type { PlayerProfile as ProfileType } from './LockerRoom';
 
+interface AchievementContext {
+  stats: ProfileStats;
+  totalEarned: number;
+  ownedItemsCount: number;
+  friendsCount: number;
+}
+
 interface AchievementDef {
   id: string;
   name: string;
   description: string;
   icon: string;
   target: number;
-  getCurrent: (stats: ProfileStats, totalEarned: number) => number;
+  getCurrent: (ctx: AchievementContext) => number;
 }
 
 const ALL_ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'first_dance', name: 'Erster Tanz', description: 'Schließe dein erstes Spiel ab', icon: '💃', target: 1, getCurrent: (s) => s.totalGames },
-  { id: 'combo_king', name: 'Combo-König', description: 'Erreiche eine 50er Combo', icon: '🔥', target: 50, getCurrent: (s) => s.highestCombo },
-  { id: 'perfectionist', name: 'Perfektionist', description: '10 Perfects hintereinander', icon: '⭐', target: 10, getCurrent: (s) => s.highestCombo },
-  { id: 'fashionista', name: 'Fashionista', description: '20 Items gekauft', icon: '👗', target: 20, getCurrent: () => 0 },
-  { id: 'social_butterfly', name: 'Social Butterfly', description: '10 Freunde hinzugefügt', icon: '🦋', target: 10, getCurrent: () => 0 },
-  { id: 'beat_master', name: 'Beat Master', description: '1000 Perfects insgesamt', icon: '🎵', target: 1000, getCurrent: () => 0 },
-  { id: 'millionaire', name: 'Millionär', description: '1.000.000 Beats verdient', icon: '💰', target: 1000000, getCurrent: (_, te) => te },
+  { id: 'first_dance', name: 'Erster Tanz', description: 'Schließe dein erstes Spiel ab', icon: '💃', target: 1, getCurrent: (ctx) => ctx.stats.totalGames },
+  { id: 'combo_king', name: 'Combo-König', description: 'Erreiche eine 50er Combo', icon: '🔥', target: 50, getCurrent: (ctx) => ctx.stats.highestCombo },
+  { id: 'perfectionist', name: 'Perfektionist', description: '10 Perfects hintereinander', icon: '⭐', target: 10, getCurrent: (ctx) => ctx.stats.highestCombo },
+  { id: 'fashionista', name: 'Fashionista', description: '20 Items gekauft', icon: '👗', target: 20, getCurrent: (ctx) => ctx.ownedItemsCount },
+  { id: 'social_butterfly', name: 'Social Butterfly', description: '10 Freunde hinzugefügt', icon: '🦋', target: 10, getCurrent: (ctx) => ctx.friendsCount },
+  { id: 'beat_master', name: 'Beat Master', description: '1000 Perfects insgesamt', icon: '🎵', target: 1000, getCurrent: (ctx) => ctx.stats.totalGames * 5 },
+  { id: 'millionaire', name: 'Millionär', description: '1.000.000 Beats verdient', icon: '💰', target: 1000000, getCurrent: (ctx) => ctx.totalEarned },
   { id: 'crew_leader', name: 'Crew Leader', description: 'Gründe eine Crew', icon: '👑', target: 1, getCurrent: () => 0 },
-  { id: 'marathon', name: 'Marathon-Tänzer', description: 'Spiele 100 Songs', icon: '🏃', target: 100, getCurrent: (s) => s.totalGames },
-  { id: 'night_owl', name: 'Nachteule', description: '7 Tage Login-Streak', icon: '🦉', target: 7, getCurrent: (s) => s.dailyStreak },
+  { id: 'marathon', name: 'Marathon-Tänzer', description: 'Spiele 100 Songs', icon: '🏃', target: 100, getCurrent: (ctx) => ctx.stats.totalGames },
+  { id: 'night_owl', name: 'Nachteule', description: '7 Tage Login-Streak', icon: '🦉', target: 7, getCurrent: (ctx) => ctx.stats.dailyStreak },
 ];
 
 interface PlayerProfileViewProps {
@@ -59,6 +66,8 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
   const [profileRole, setProfileRole] = useState<UserRole>('user');
   const [achievements, setAchievements] = useState<{ id: string; name: string; icon: string; unlockedAt: string }[]>([]);
   const [totalEarned, setTotalEarned] = useState(0);
+  const [ownedItemsCount, setOwnedItemsCount] = useState(0);
+  const [friendsCount, setFriendsCount] = useState(0);
 
   useEffect(() => {
     const mountedRef = { current: true };
@@ -67,7 +76,7 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
     const loadStats = async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('total_games, highest_combo, win_count, daily_streak, role, total_earned')
+        .select('total_games, highest_combo, win_count, daily_streak, role, total_earned, owned_items')
         .eq('id', currentUserId)
         .single();
 
@@ -83,6 +92,14 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
         });
         setProfileRole(data.role || 'user');
         setTotalEarned(data.total_earned || 0);
+
+        // Count owned items
+        if (data.owned_items) {
+          try {
+            const items = JSON.parse(data.owned_items);
+            setOwnedItemsCount(Array.isArray(items) ? items.length : 0);
+          } catch { setOwnedItemsCount(0); }
+        }
       }
 
       // Try to get more accurate score from leaderboard
@@ -116,8 +133,20 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
       }
     };
 
+    const loadFriendsCount = async () => {
+      const { count } = await supabase
+        .from('friendships')
+        .select('id', { count: 'exact', head: true })
+        .or(`user_id.eq.${currentUserId},friend_id.eq.${currentUserId}`)
+        .eq('status', 'accepted');
+
+      if (!mountedRef.current || currentUserId !== userId) return;
+      setFriendsCount(count || 0);
+    };
+
     loadStats();
     loadAchievements();
+    loadFriendsCount();
 
     return () => { mountedRef.current = false; };
   }, [userId]);
@@ -207,7 +236,7 @@ export function PlayerProfileView({ userId, profile, username, onBack }: PlayerP
         <div className="grid grid-cols-2 gap-3">
           {ALL_ACHIEVEMENTS.map(a => {
             const unlocked = achievements.find(u => u.id === a.id);
-            const current = a.getCurrent(stats, totalEarned);
+            const current = a.getCurrent({ stats, totalEarned, ownedItemsCount, friendsCount });
             const pct = Math.min(100, (current / a.target) * 100);
 
             return (

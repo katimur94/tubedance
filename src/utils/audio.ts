@@ -12,7 +12,7 @@ export class SoundEngine {
   }
 
   /** Hit-Sound pro Bewertung */
-  playHit(type: 'perfect' | 'great' | 'good' | 'bad') {
+  playHit(type: 'perfect' | 'great' | 'good' | 'cool' | 'bad') {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
@@ -42,7 +42,7 @@ export class SoundEngine {
         o.start(now + i * 0.06);
         o.stop(now + i * 0.06 + 0.12);
       });
-    } else if (type === 'good') {
+    } else if (type === 'good' || type === 'cool') {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
@@ -261,6 +261,7 @@ export class AutoBPMDetector {
 
           if (energyHistory.length >= sampleRate * durationSec) {
             clearInterval(interval);
+            this.destroy();
             resolve(this.estimateBPM(energyHistory, sampleRate));
           }
         }, 1000 / sampleRate);
@@ -268,6 +269,7 @@ export class AutoBPMDetector {
         // Timeout fallback
         setTimeout(() => {
           clearInterval(interval);
+          this.destroy();
           if (energyHistory.length > sampleRate * 2) {
             resolve(this.estimateBPM(energyHistory, sampleRate));
           } else {
@@ -387,9 +389,10 @@ export class AudioAnalyzer {
 
   destroy() {
     this._active = false;
-    this.stream?.getTracks().forEach(t => t.stop());
     this.source?.disconnect();
+    this.analyser?.disconnect();
+    this.stream?.getTracks().forEach(t => t.stop());
     this.audioCtx?.close();
-    this.stream = null; this.audioCtx = null; this.analyser = null;
+    this.source = null; this.analyser = null; this.stream = null; this.audioCtx = null;
   }
 }

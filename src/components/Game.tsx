@@ -195,7 +195,7 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
       channelRef.current = channel;
       setLeaderboard([{ userId, username, score: savedScore?.score || 0, combo: savedScore?.combo || 0, profile, danceState: 'idle', intensity: 1, lastRating: null, lastRatingTime: 0 }]);
 
-      return () => { supabase.removeChannel(channel); };
+      return () => { channel.unsubscribe().then(() => supabase.removeChannel(channel)); };
     }
   }, [mode, roomCode, userId, username]);
 
@@ -248,30 +248,37 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
 
   // Auto-start countdown in multiplayer — immediate and synchronized
   const syncStartHandled = useRef(false);
+  const countdownRef = useRef(countdown);
+  useEffect(() => { countdownRef.current = countdown; }, [countdown]);
+
+  // Register sync_countdown listener ONCE (not inside the start effect)
+  useEffect(() => {
+    if (mode !== 'audition' || !channelRef.current) return;
+    const channel = channelRef.current;
+    const handler = (payload: any) => {
+      if (countdownRef.current === null && gamePhaseRef.current === 'ready') {
+        setCountdown(3);
+        setAvatarDance('dancing');
+      }
+    };
+    channel.on('broadcast', { event: 'sync_countdown' }, handler);
+    // No cleanup needed — channel.unsubscribe() in the main effect handles it
+  }, [mode, roomCode, userId, username]);
+
   useEffect(() => {
     if (mode === 'audition' && gamePhase === 'ready' && countdown === null && !syncStartHandled.current) {
       syncStartHandled.current = true;
 
       if (liveJoin) {
-        // Live join — skip countdown, start playing immediately
-        // YouTube onReady will auto-play when it sees gamePhaseRef === 'playing'
         setGamePhase('playing');
         setAvatarDance('dancing');
         return;
       }
 
-      // Normal start — countdown for all players
       setCountdown(3);
       setAvatarDance('dancing');
 
-      // Broadcast sync signal so late-joining players also start
       if (channelRef.current) {
-        channelRef.current.on('broadcast', { event: 'sync_countdown' }, () => {
-          if (countdown === null && gamePhase === 'ready') {
-            setCountdown(3);
-            setAvatarDance('dancing');
-          }
-        });
         channelRef.current.send({
           type: 'broadcast', event: 'sync_countdown', payload: {},
         });

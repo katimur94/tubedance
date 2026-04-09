@@ -36,6 +36,7 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
   const [juryScore, setJuryScore] = useState(0);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const feedbackIdRef = useRef(0);
+  const feedbackTimerRef = useRef<any>(null);
   const startTimeRef = useRef(performance.now());
   const lastDirectionRef = useRef(-1);
   const repeatCountRef = useRef(0);
@@ -111,6 +112,7 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
       if (rating === 'Miss') {
         onMiss();
         setUniqueDirections(new Set());
+        setJuryScore(s => Math.max(0, s - 5));
       } else {
         onHit(rating, finalPoints);
         setCurrentComboLength(c => c + 1);
@@ -124,7 +126,8 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
       // Feedback
       const id = feedbackIdRef.current++;
       setFeedback({ rating, id });
-      setTimeout(() => setFeedback(null), 400);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = setTimeout(() => setFeedback(null), 400);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -142,6 +145,7 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
   }, [isPlaying, bpm, uniqueDirections, getBeatAccuracy, onHit, onMiss]);
 
