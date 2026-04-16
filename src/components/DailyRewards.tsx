@@ -47,21 +47,25 @@ function saveDailyState(state: DailyState) {
   });
 }
 
+function getLocalDateStr(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getToday(): string {
-  return new Date().toISOString().split('T')[0];
+  return getLocalDateStr();
 }
 
 function isYesterday(dateStr: string): boolean {
-  const date = new Date(dateStr);
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return date.toISOString().split('T')[0] === yesterday.toISOString().split('T')[0];
+  return dateStr === getLocalDateStr(yesterday);
 }
 
 export function DailyRewards({ onClose }: DailyRewardsProps) {
   const [state, setState] = useState<DailyState>(() => getDailyState());
   const [claimed, setClaimed] = useState(false);
   const [rewardAmount, setRewardAmount] = useState(0);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   const today = getToday();
   const alreadyClaimed = state.lastClaim === today;
@@ -69,10 +73,11 @@ export function DailyRewards({ onClose }: DailyRewardsProps) {
   // Calculate current streak position (1-7, cycles)
   const streakDay = ((state.streak - 1) % 7) + 1;
 
-  const canClaim = !alreadyClaimed;
+  const canClaim = !alreadyClaimed && !isClaiming;
 
   const handleClaim = async () => {
-    if (!canClaim) return;
+    if (!canClaim || isClaiming) return;
+    setIsClaiming(true);
 
     // Calculate reward locally (used for both RPC success fallback and local-only mode)
     let newStreak = state.streak;
@@ -126,6 +131,7 @@ export function DailyRewards({ onClose }: DailyRewardsProps) {
     setState(newState);
     setRewardAmount(amount);
     setClaimed(true);
+    setIsClaiming(false);
   };
 
   return (
@@ -163,8 +169,8 @@ export function DailyRewards({ onClose }: DailyRewardsProps) {
           <div className="grid grid-cols-7 gap-2">
             {DAILY_REWARDS.map((reward, i) => {
               const dayNum = i + 1;
-              const currentDayIndex = ((state.streak) % 7);
-              const isPast = alreadyClaimed ? i < currentDayIndex || (i === currentDayIndex) : i < currentDayIndex;
+              const currentDayIndex = ((state.streak - 1) % 7);
+              const isPast = alreadyClaimed ? i <= currentDayIndex : i < currentDayIndex;
               const isCurrent = !alreadyClaimed && i === currentDayIndex;
               const Icon = reward.icon;
 

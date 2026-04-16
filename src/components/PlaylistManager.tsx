@@ -153,19 +153,23 @@ export function PlaylistManager({ onSelectPlaylist }: { onSelectPlaylist: (songs
     if (!error && data) setSongs(data);
   };
 
-  const extractYoutubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const extractYoutubeId = (url: string): string | null => {
+    // Handle direct video ID input (8-12 chars)
+    if (/^[a-zA-Z0-9_-]{8,12}$/.test(url.trim())) return url.trim();
+    const regExp = /^.*(youtu\.?be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([a-zA-Z0-9_-]{8,12}).*/;
     const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+    return match ? match[2] : null;
   };
 
   const handleImport = async () => {
     const videoId = extractYoutubeId(importUrl);
-    if (!videoId) return alert('Ungültiger YouTube Link');
+    if (!videoId) return alert('Ungueltiger YouTube Link. Unterstuetzte Formate: youtube.com/watch?v=..., youtu.be/..., Video-ID');
 
     try {
       const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+      if (!res.ok) throw new Error(`Metadata fetch failed: ${res.status}`);
       const metadata = await res.json();
+      if (metadata.error) throw new Error(metadata.error);
       const title = metadata.title || 'Unknown Title';
 
       const { data: pData, error: pError } = await supabase

@@ -245,7 +245,7 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
 
     return () => {
       mountedRef.current = false;
-      lobbyChannel.unsubscribe().then(() => supabase.removeChannel(lobbyChannel));
+      lobbyChannel.unsubscribe().then(() => supabase.removeChannel(lobbyChannel)).catch(() => supabase.removeChannel(lobbyChannel));
     };
   }, []);
 
@@ -382,13 +382,18 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
         }
         setPlayers(activePlayers);
 
-        // Broadcast room status to lobby so other players see player counts
+        // Broadcast room status to lobby (throttled — only when player count changes)
         if (lobbyChannelRef.current && code.startsWith('fixed:')) {
-          lobbyChannelRef.current.send({
-            type: 'broadcast',
-            event: 'room_status',
-            payload: { channelName: code, count: activePlayers.length, playing: false },
-          });
+          const countKey = `_lastBroadcastCount_${code}`;
+          const lastCount = (window as any)[countKey] || 0;
+          if (activePlayers.length !== lastCount) {
+            (window as any)[countKey] = activePlayers.length;
+            lobbyChannelRef.current.send({
+              type: 'broadcast',
+              event: 'room_status',
+              payload: { channelName: code, count: activePlayers.length, playing: false },
+            });
+          }
         }
 
         // Use refs to get the latest values (avoid stale closures)
@@ -410,13 +415,21 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
         } else {
           // ── Custom Room Leader Logic (DB-backed) ──
 
-          // Auto-close: if no players remain and we previously saw players, delete the room
-          if (activePlayers.length === 0 && inRoomRef.current && hadPlayersRef.current) {
-            supabase.from('game_rooms').delete().eq('room_code', code).then(() => {}, (err: any) => console.warn('[RoomBrowser] auto-close failed:', err));
-            return;
-          }
+          // Auto-close: if no players remain and we had players for >3s, delete the room
+          // Delay prevents race condition where room is deleted before host finishes joining
           if (activePlayers.length > 0) {
             hadPlayersRef.current = true;
+          }
+          if (activePlayers.length === 0 && inRoomRef.current && hadPlayersRef.current) {
+            // Wait 3 seconds to confirm room is truly empty (prevents join race)
+            setTimeout(() => {
+              const state = channelRef.current?.presenceState?.();
+              const stillEmpty = !state || Object.keys(state).length === 0;
+              if (stillEmpty) {
+                supabase.from('game_rooms').delete().eq('room_code', code).then(() => {}, (err: any) => console.warn('[RoomBrowser] auto-close failed:', err));
+              }
+            }, 3000);
+            return;
           }
 
           // Determine host from presence data
@@ -1129,10 +1142,12 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
                 <ArrowDown size={16} className="rotate-90" />
               </button>
               <div>
-                <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 uppercase tracking-wider">
-                  Multiplayer Lobby
+                <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-300 to-cyan-400 uppercase tracking-wider">
+                  AUDITION LOBBY
                 </h1>
-                <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mt-1">20 Räume &middot; {onlinePlayers.length} Spieler online</p>
+                <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mt-1">
+                  {filteredFixedRooms.length} Räume &middot; {onlinePlayers.length} Spieler online &middot; Max 6 pro Raum
+                </p>
               </div>
             </div>
           </div>
@@ -1189,51 +1204,91 @@ export function RoomBrowser({ userId, username, profile, userRole = 'user', rejo
           </button>
         </div>
 
-        {/* Fixed Room Cards */}
-        <div className="space-y-2">
-          {filteredFixedRooms.map(room => {
-            const ModeIcon = MODE_ICONS[room.mode] || Zap;
-            const modeConfig = GAME_MODES.find(m => m.id === room.mode);
+        {/* Audition-Style Server List Table */}
+        <div className="bg-purple-950/40 border border-purple-700/30 rounded-2xl overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[50px_1fr_120px_100px_80px_90px] gap-0 px-4 py-2.5 bg-gradient-to-r from-pink-900/40 to-purple-900/40 border-b border-purple-700/30 text-[10px] font-black text-purple-400 uppercase tracking-[0.15em]">
+            <span>#</span>
+            <span>Raum</span>
+            <span>Modus</span>
+            <span>Status</span>
+            <span>Spieler</span>
+            <span></span>
+          </div>
 
-            const status = fixedRoomStatus[room.channelName];
-            const playerCount = status?.count || 0;
-            const isPlaying = status?.playing || false;
+          {/* Room Rows */}
+          <div className="divide-y divide-purple-800/20">
+            {filteredFixedRooms.map((room, idx) => {
+              const ModeIcon = MODE_ICONS[room.mode] || Zap;
+              const modeConfig = GAME_MODES.find(m => m.id === room.mode);
 
-            return (
-              <motion.div key={room.channelName} whileHover={{ scale: 1.01 }}
-                onClick={() => joinFixedRoom(room)}
-                className={`flex items-center gap-4 p-4 bg-purple-950/50 border rounded-2xl hover:border-purple-500/50 cursor-pointer transition-all group ${
-                  playerCount > 0 ? 'border-purple-600/40' : 'border-purple-800/30'
-                }`}>
-                {/* Mode Icon */}
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${modeConfig?.color || 'from-cyan-500 to-blue-600'} flex items-center justify-center shadow-lg`}>
-                  <ModeIcon size={16} className="text-white" />
-                </div>
+              const status = fixedRoomStatus[room.channelName];
+              const playerCount = status?.count || 0;
+              const isPlaying = status?.playing || false;
 
-                {/* Room Info */}
-                <div className="flex-1">
-                  <h3 className="text-white font-bold text-sm">{room.displayName}</h3>
-                  <p className="text-purple-500 text-xs font-bold mt-0.5">
-                    {isPlaying ? '🎵 Spielt gerade...' : playerCount > 0 ? 'Wartet auf Spieler' : 'Leer'}
-                  </p>
-                </div>
+              return (
+                <motion.div
+                  key={room.channelName}
+                  whileHover={{ backgroundColor: 'rgba(168,85,247,0.1)' }}
+                  onClick={() => joinFixedRoom(room)}
+                  className={`grid grid-cols-[50px_1fr_120px_100px_80px_90px] gap-0 px-4 py-3 cursor-pointer transition-all group items-center ${
+                    playerCount > 0
+                      ? isPlaying ? 'bg-pink-950/10' : 'bg-purple-950/20'
+                      : ''
+                  }`}
+                >
+                  {/* Room Number */}
+                  <span className="text-purple-500 font-mono text-xs font-bold">{idx + 1}</span>
 
-                {/* Player Count */}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black ${
-                  playerCount > 0 ? 'bg-green-900/30 border border-green-500/30 text-green-400' : 'bg-purple-900/30 border border-purple-700/30 text-purple-500'
-                }`}>
-                  <Users size={12} />
-                  <span>{playerCount}/8</span>
-                </div>
+                  {/* Room Name */}
+                  <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${modeConfig?.color || 'from-cyan-500 to-blue-600'} flex items-center justify-center shadow-md`}>
+                      <ModeIcon size={12} className="text-white" />
+                    </div>
+                    <span className="text-white font-bold text-sm truncate">{room.displayName}</span>
+                  </div>
 
-                {/* Join hint */}
-                <div className="flex items-center gap-1.5 text-cyan-400 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                  <LogIn size={12} />
-                  <span>Beitreten</span>
-                </div>
-              </motion.div>
-            );
-          })}
+                  {/* Mode */}
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-md w-fit ${
+                    room.mode === 'beat_up' ? 'text-cyan-400 bg-cyan-900/30' :
+                    room.mode === 'beat_rush' ? 'text-pink-400 bg-pink-900/30' :
+                    room.mode === 'freestyle' ? 'text-yellow-400 bg-yellow-900/30' :
+                    'text-green-400 bg-green-900/30'
+                  }`}>
+                    {modeConfig?.name || room.mode}
+                  </span>
+
+                  {/* Status */}
+                  <span className={`text-xs font-bold ${
+                    isPlaying ? 'text-orange-400' : playerCount > 0 ? 'text-green-400' : 'text-gray-600'
+                  }`}>
+                    {isPlaying ? '♪ Playing' : playerCount > 0 ? '● Waiting' : '○ Empty'}
+                  </span>
+
+                  {/* Player Count */}
+                  <div className="flex items-center gap-1">
+                    <div className="flex gap-0.5">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div key={i} className={`w-1.5 h-3 rounded-sm ${
+                          i < playerCount ? 'bg-green-400' : 'bg-gray-700'
+                        }`} />
+                      ))}
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold ml-1 ${playerCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                      {playerCount}/6
+                    </span>
+                  </div>
+
+                  {/* Join Button */}
+                  <div className="flex justify-end">
+                    <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-all bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                      JOIN
+                    </span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { AnimatedAvatar } from './AnimatedAvatar';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Edit2, Check, User, Shirt, Sparkles, Smile, Crown, Package, Backpack, X } from 'lucide-react';
+import { ArrowLeft, Edit2, Check, User, Shirt, Sparkles, Smile, Crown, Package, Backpack, X, ChevronDown, Eye, Ear, Palette } from 'lucide-react';
 import { SHOP_CATALOG, getOwnedItems } from '../lib/economy';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -12,22 +12,51 @@ export interface BodyParams {
   bodyFat: number;
   headSize: number;
   skinColor: string;
+  armLength: number;
+  legLength: number;
+  shoulderWidth: number;
+  hipWidth: number;
+  neckLength: number;
+  neckThickness: number;
 }
 
 export interface FaceParams {
   eyeStyle: 'normal' | 'happy' | 'cool' | 'angry' | 'sad' | 'wink';
   eyeColor: string;
+  eyeSpacing: number;
+  eyeSize: number;
   mouthStyle: 'smile' | 'neutral' | 'open' | 'grin' | 'pout';
-  hairStyle: 'none' | 'short' | 'long' | 'spike' | 'ponytail';
+  lipThickness: number;
+  hairStyle: 'none' | 'short' | 'long' | 'spike' | 'ponytail' | 'bob' | 'twintails' | 'braid' | 'afro' | 'mohawk' | 'sideshave' | 'curly' | 'wavy' | 'bun' | 'pigtails';
   hairColor: string;
+  noseSize: number;
+  noseShape: 'button' | 'pointed' | 'wide' | 'flat';
+  earSize: number;
+  earShape: 'round' | 'pointed' | 'small';
+  eyebrowStyle: 'none' | 'thin' | 'thick' | 'arched' | 'straight' | 'bushy';
+  eyebrowColor: string;
+  eyebrowThickness: number;
+  chinShape: 'round' | 'square' | 'pointed';
+  foreheadHeight: number;
+  cheekWidth: number;
+  freckles: boolean;
 }
 
+// Anime-style defaults — warm skin, big head, cute eyes
 export const DEFAULT_BODY: BodyParams = {
-  gender: 'male', height: 1, muscles: 0.3, bodyFat: 0.2, headSize: 1, skinColor: '#f3f4f6',
+  gender: 'male', height: 1, muscles: 0.2, bodyFat: 0.1, headSize: 1.3, skinColor: '#fce4d6',
+  armLength: 1, legLength: 1, shoulderWidth: 1, hipWidth: 1, neckLength: 1, neckThickness: 1,
 };
 
 export const DEFAULT_FACE: FaceParams = {
-  eyeStyle: 'normal', eyeColor: '#22d3ee', mouthStyle: 'smile', hairStyle: 'long', hairColor: '#1f2937'
+  eyeStyle: 'normal', eyeColor: '#22d3ee', eyeSpacing: 1, eyeSize: 1,
+  mouthStyle: 'smile', lipThickness: 1,
+  hairStyle: 'long', hairColor: '#2d1b4e',
+  noseSize: 1, noseShape: 'button',
+  earSize: 1, earShape: 'round',
+  eyebrowStyle: 'thin', eyebrowColor: '#2d1b4e', eyebrowThickness: 1,
+  chinShape: 'round', foreheadHeight: 1, cheekWidth: 1,
+  freckles: false,
 };
 
 export interface PlayerProfile {
@@ -65,90 +94,134 @@ interface WardrobeItem {
   id: string;
   name: string;
   preview: string;
+  icon?: string;
   reqLevel: number;
 }
 
 const WARDROBE: Partial<Record<ClothingTab, WardrobeItem[]>> = {
   jacket: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'leather_black', name: 'Black Leather', preview: 'bg-gray-900', reqLevel: 1 },
-    { id: 'camo_green', name: 'Jungle Camo', preview: 'bg-green-800', reqLevel: 1 },
-    { id: 'plaid_red', name: 'Lumberjack', preview: 'bg-red-600', reqLevel: 2 },
-    { id: 'tracksuit_red', name: 'Red Tracksuit', preview: 'bg-red-500', reqLevel: 3 },
-    { id: 'swag_gold', name: 'Golden Swag', preview: 'bg-yellow-400', reqLevel: 10 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'leather_black', name: 'Black Leather', preview: 'bg-gray-900', icon: '🧥', reqLevel: 1 },
+    { id: 'camo_green', name: 'Jungle Camo', preview: 'bg-green-800', icon: '🌿', reqLevel: 1 },
+    { id: 'plaid_red', name: 'Lumberjack', preview: 'bg-red-600', icon: '🪓', reqLevel: 2 },
+    { id: 'tracksuit_red', name: 'Red Tracksuit', preview: 'bg-red-500', icon: '🏃', reqLevel: 3 },
+    { id: 'bomber_navy', name: 'Bomber Navy', preview: 'bg-blue-900', icon: '✈️', reqLevel: 3 },
+    { id: 'varsity_green', name: 'Varsity', preview: 'bg-emerald-700', icon: '🏈', reqLevel: 4 },
+    { id: 'windbreaker', name: 'Windbreaker', preview: 'bg-sky-400', icon: '💨', reqLevel: 5 },
+    { id: 'kimono', name: 'Kimono', preview: 'bg-rose-800', icon: '🎎', reqLevel: 6 },
+    { id: 'blazer_black', name: 'Blazer', preview: 'bg-neutral-900', icon: '👔', reqLevel: 7 },
+    { id: 'swag_gold', name: 'Golden Swag', preview: 'bg-yellow-400', icon: '👑', reqLevel: 10 },
   ],
   tshirt: [
-    { id: 'none', name: 'Keines', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'tshirt_white', name: 'Weiss', preview: 'bg-gray-100', reqLevel: 1 },
-    { id: 'tshirt_black', name: 'Schwarz', preview: 'bg-gray-900', reqLevel: 1 },
-    { id: 'tshirt_red', name: 'Rot', preview: 'bg-red-600', reqLevel: 1 },
-    { id: 'tshirt_blue', name: 'Blau', preview: 'bg-blue-600', reqLevel: 1 },
-    { id: 'tshirt_neon', name: 'Neon', preview: 'bg-emerald-500', reqLevel: 3 },
-    { id: 'tshirt_stripe', name: 'Gestreift', preview: 'bg-blue-900', reqLevel: 2 },
+    { id: 'none', name: 'Keines', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'tshirt_white', name: 'Weiss', preview: 'bg-gray-100', icon: '👕', reqLevel: 1 },
+    { id: 'tshirt_black', name: 'Schwarz', preview: 'bg-gray-900', icon: '👕', reqLevel: 1 },
+    { id: 'tshirt_red', name: 'Rot', preview: 'bg-red-600', icon: '❤️', reqLevel: 1 },
+    { id: 'tshirt_blue', name: 'Blau', preview: 'bg-blue-600', icon: '💙', reqLevel: 1 },
+    { id: 'tshirt_neon', name: 'Neon', preview: 'bg-emerald-500', icon: '💚', reqLevel: 3 },
+    { id: 'tshirt_stripe', name: 'Gestreift', preview: 'bg-blue-900', icon: '📏', reqLevel: 2 },
+    { id: 'crop_top', name: 'Crop Top', preview: 'bg-pink-400', icon: '✂️', reqLevel: 3 },
+    { id: 'tanktop', name: 'Tanktop', preview: 'bg-orange-500', icon: '☀️', reqLevel: 2 },
+    { id: 'polo_white', name: 'Polo', preview: 'bg-white', icon: '🐴', reqLevel: 4 },
+    { id: 'hawaiian', name: 'Hawaii', preview: 'bg-gradient-to-r from-yellow-400 to-green-400', icon: '🌺', reqLevel: 5 },
+    { id: 'graphic_tee', name: 'Graphic Tee', preview: 'bg-purple-700', icon: '🎨', reqLevel: 4 },
   ],
   vest: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'vest_leather', name: 'Leder', preview: 'bg-stone-800', reqLevel: 3 },
-    { id: 'vest_denim', name: 'Denim', preview: 'bg-blue-800', reqLevel: 2 },
-    { id: 'vest_neon', name: 'Neon', preview: 'bg-gradient-to-r from-fuchsia-400 to-indigo-400', reqLevel: 5 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'vest_leather', name: 'Leder', preview: 'bg-stone-800', icon: '🦺', reqLevel: 3 },
+    { id: 'vest_denim', name: 'Denim', preview: 'bg-blue-800', icon: '🔵', reqLevel: 2 },
+    { id: 'vest_neon', name: 'Neon', preview: 'bg-gradient-to-r from-fuchsia-400 to-indigo-400', icon: '💜', reqLevel: 5 },
+    { id: 'vest_puffer', name: 'Puffer', preview: 'bg-red-700', icon: '🧣', reqLevel: 4 },
   ],
   pants: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'denim_blue', name: 'Blue Denim', preview: 'bg-blue-800', reqLevel: 1 },
-    { id: 'denim_black', name: 'Black Denim', preview: 'bg-gray-800', reqLevel: 1 },
-    { id: 'tracksuit_black', name: 'Adidas Style', preview: 'bg-black', reqLevel: 2 },
-    { id: 'camo_green', name: 'Camo Pants', preview: 'bg-green-800', reqLevel: 4 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'denim_blue', name: 'Blue Denim', preview: 'bg-blue-800', icon: '👖', reqLevel: 1 },
+    { id: 'denim_black', name: 'Black Denim', preview: 'bg-gray-800', icon: '👖', reqLevel: 1 },
+    { id: 'tracksuit_black', name: 'Adidas Style', preview: 'bg-black', icon: '🏃', reqLevel: 2 },
+    { id: 'camo_green', name: 'Camo Pants', preview: 'bg-green-800', icon: '🌿', reqLevel: 4 },
+    { id: 'chinos_beige', name: 'Chinos', preview: 'bg-amber-200', icon: '📐', reqLevel: 3 },
+    { id: 'palazzo', name: 'Palazzo', preview: 'bg-purple-300', icon: '💃', reqLevel: 5 },
+    { id: 'leather_pants', name: 'Lederhose', preview: 'bg-stone-900', icon: '🎸', reqLevel: 6 },
+    { id: 'bell_bottoms', name: 'Schlaghose', preview: 'bg-indigo-700', icon: '🕺', reqLevel: 7 },
+    { id: 'overalls', name: 'Overalls', preview: 'bg-blue-500', icon: '🔧', reqLevel: 5 },
   ],
   shorts: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'shorts_cargo', name: 'Cargo', preview: 'bg-lime-700', reqLevel: 1 },
-    { id: 'shorts_denim', name: 'Denim', preview: 'bg-blue-500', reqLevel: 1 },
-    { id: 'shorts_sport', name: 'Sport', preview: 'bg-gray-900', reqLevel: 2 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'shorts_cargo', name: 'Cargo', preview: 'bg-lime-700', icon: '🩳', reqLevel: 1 },
+    { id: 'shorts_denim', name: 'Denim', preview: 'bg-blue-500', icon: '🩳', reqLevel: 1 },
+    { id: 'shorts_sport', name: 'Sport', preview: 'bg-gray-900', icon: '⚽', reqLevel: 2 },
+    { id: 'shorts_swim', name: 'Badehose', preview: 'bg-cyan-500', icon: '🏖️', reqLevel: 3 },
+    { id: 'shorts_neon', name: 'Neon Shorts', preview: 'bg-gradient-to-r from-green-400 to-yellow-300', icon: '💡', reqLevel: 4 },
   ],
   shoes: [
-    { id: 'shoes_sneakers', name: 'White Sneakers', preview: 'bg-gray-200', reqLevel: 1 },
-    { id: 'shoes_boots', name: 'Brown Boots', preview: 'bg-amber-900', reqLevel: 1 },
-    { id: 'swag_gold', name: 'Golden Kicks', preview: 'bg-yellow-400', reqLevel: 10 },
+    { id: 'shoes_sneakers', name: 'White Sneakers', preview: 'bg-gray-200', icon: '👟', reqLevel: 1 },
+    { id: 'shoes_boots', name: 'Brown Boots', preview: 'bg-amber-900', icon: '🥾', reqLevel: 1 },
+    { id: 'shoes_platforms', name: 'Platforms', preview: 'bg-pink-600', icon: '👠', reqLevel: 3 },
+    { id: 'shoes_sandals', name: 'Sandalen', preview: 'bg-amber-400', icon: '🩴', reqLevel: 2 },
+    { id: 'shoes_loafers', name: 'Loafers', preview: 'bg-stone-700', icon: '👞', reqLevel: 4 },
+    { id: 'shoes_combat', name: 'Combat Boots', preview: 'bg-neutral-800', icon: '🪖', reqLevel: 5 },
+    { id: 'swag_gold', name: 'Golden Kicks', preview: 'bg-yellow-400', icon: '👑', reqLevel: 10 },
   ],
   hat: [
-    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'hat_snapback', name: 'Snapback', preview: 'bg-gray-900', reqLevel: 1 },
-    { id: 'hat_beanie', name: 'Beanie', preview: 'bg-purple-800', reqLevel: 2 },
-    { id: 'hat_tophat', name: 'Zylinder', preview: 'bg-slate-900', reqLevel: 8 },
-    { id: 'hat_crown', name: 'Krone', preview: 'bg-gradient-to-r from-yellow-400 to-amber-500', reqLevel: 15 },
+    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'hat_snapback', name: 'Snapback', preview: 'bg-gray-900', icon: '🧢', reqLevel: 1 },
+    { id: 'hat_beanie', name: 'Beanie', preview: 'bg-purple-800', icon: '🎿', reqLevel: 2 },
+    { id: 'hat_bandana', name: 'Bandana', preview: 'bg-red-700', icon: '🏴‍☠️', reqLevel: 2 },
+    { id: 'hat_headband', name: 'Stirnband', preview: 'bg-orange-500', icon: '🥋', reqLevel: 3 },
+    { id: 'hat_beret', name: 'Baskenmutze', preview: 'bg-rose-900', icon: '🎨', reqLevel: 4 },
+    { id: 'hat_bucket', name: 'Bucket Hat', preview: 'bg-lime-600', icon: '🪣', reqLevel: 4 },
+    { id: 'hat_witch', name: 'Hexenhut', preview: 'bg-violet-950', icon: '🧙', reqLevel: 8 },
+    { id: 'hat_tophat', name: 'Zylinder', preview: 'bg-slate-900', icon: '🎩', reqLevel: 8 },
+    { id: 'hat_crown', name: 'Krone', preview: 'bg-gradient-to-r from-yellow-400 to-amber-500', icon: '👑', reqLevel: 15 },
   ],
   glasses: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'glasses_shades', name: 'Shades', preview: 'bg-slate-900', reqLevel: 1 },
-    { id: 'glasses_nerd', name: 'Nerd', preview: 'bg-slate-800', reqLevel: 2 },
-    { id: 'glasses_led', name: 'LED', preview: 'bg-gradient-to-r from-red-500 via-cyan-400 to-purple-500', reqLevel: 5 },
-    { id: 'glasses_aviator', name: 'Aviator', preview: 'bg-amber-700', reqLevel: 3 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'glasses_shades', name: 'Shades', preview: 'bg-slate-900', icon: '🕶️', reqLevel: 1 },
+    { id: 'glasses_nerd', name: 'Nerd', preview: 'bg-slate-800', icon: '🤓', reqLevel: 2 },
+    { id: 'glasses_round', name: 'Rund', preview: 'bg-amber-800', icon: '⭕', reqLevel: 3 },
+    { id: 'glasses_cat_eye', name: 'Cat Eye', preview: 'bg-rose-700', icon: '🐱', reqLevel: 4 },
+    { id: 'glasses_sport', name: 'Sport Goggles', preview: 'bg-orange-600', icon: '🥽', reqLevel: 4 },
+    { id: 'glasses_cyber', name: 'Cyber Visor', preview: 'bg-gradient-to-r from-cyan-500 to-blue-600', icon: '🤖', reqLevel: 6 },
+    { id: 'glasses_led', name: 'LED', preview: 'bg-gradient-to-r from-red-500 via-cyan-400 to-purple-500', icon: '💡', reqLevel: 5 },
+    { id: 'glasses_aviator', name: 'Aviator', preview: 'bg-amber-700', icon: '✈️', reqLevel: 3 },
   ],
   beard: [
-    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'beard_stubble', name: 'Stoppeln', preview: 'bg-stone-600', reqLevel: 1 },
-    { id: 'beard_goatee', name: 'Goatee', preview: 'bg-stone-800', reqLevel: 2 },
-    { id: 'beard_full', name: 'Vollbart', preview: 'bg-amber-900', reqLevel: 3 },
+    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'beard_stubble', name: 'Stoppeln', preview: 'bg-stone-600', icon: '🪒', reqLevel: 1 },
+    { id: 'beard_goatee', name: 'Goatee', preview: 'bg-stone-800', icon: '🐐', reqLevel: 2 },
+    { id: 'beard_full', name: 'Vollbart', preview: 'bg-amber-900', icon: '🧔', reqLevel: 3 },
+    { id: 'beard_viking', name: 'Wikinger', preview: 'bg-amber-800', icon: '⚔️', reqLevel: 6 },
   ],
   mustache: [
-    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'mustache_thin', name: 'Duenn', preview: 'bg-stone-900', reqLevel: 1 },
-    { id: 'mustache_handlebar', name: 'Handlebar', preview: 'bg-stone-700', reqLevel: 3 },
+    { id: 'none', name: 'Keinen', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'mustache_thin', name: 'Duenn', preview: 'bg-stone-900', icon: '〰️', reqLevel: 1 },
+    { id: 'mustache_handlebar', name: 'Handlebar', preview: 'bg-stone-700', icon: '🥸', reqLevel: 3 },
+    { id: 'mustache_walrus', name: 'Walross', preview: 'bg-stone-500', icon: '🦭', reqLevel: 4 },
   ],
   wings: [
-    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', reqLevel: 1 },
-    { id: 'wings_angel', name: 'Engel', preview: 'bg-gray-100', reqLevel: 10 },
-    { id: 'wings_demon', name: 'Daemon', preview: 'bg-red-950', reqLevel: 12 },
-    { id: 'wings_neon', name: 'Neon', preview: 'bg-gradient-to-r from-cyan-400 to-purple-500', reqLevel: 15 },
+    { id: 'none', name: 'Keine', preview: 'bg-gray-800 border border-dashed border-gray-600', icon: '❌', reqLevel: 1 },
+    { id: 'wings_angel', name: 'Engel', preview: 'bg-gray-100', icon: '😇', reqLevel: 10 },
+    { id: 'wings_demon', name: 'Daemon', preview: 'bg-red-950', icon: '😈', reqLevel: 12 },
+    { id: 'wings_butterfly', name: 'Schmetterling', preview: 'bg-gradient-to-r from-pink-400 to-yellow-400', icon: '🦋', reqLevel: 8 },
+    { id: 'wings_neon', name: 'Neon', preview: 'bg-gradient-to-r from-cyan-400 to-purple-500', icon: '⚡', reqLevel: 15 },
   ],
 };
 
-const SKIN_COLORS = ['#f3f4f6', '#fde68a', '#fdba74', '#d4a574', '#a0845c', '#8b6b4a', '#6b4423', '#4a2c17'];
+const SKIN_COLORS = ['#fce4d6', '#f3f4f6', '#fde68a', '#fdba74', '#d4a574', '#a0845c', '#8b6b4a', '#6b4423', '#4a2c17'];
 const EYE_COLORS = ['#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#22c55e', '#f59e0b', '#f3f4f6'];
 
-type EditorCategory = 'body' | 'face' | 'inventory';
+// Available anime character models (CC0 VRM from OpenGameArt)
+const ANIME_AVATARS = [
+  { id: 'none', name: 'Procedural (Custom)', url: '', thumbnail: '🤖' },
+  { id: 'anime_1', name: 'Anime Girl A', url: '/models/anime_girl_1.glb', thumbnail: '👧' },
+  { id: 'anime_2', name: 'Sendagaya Shino', url: '/models/anime_girl_2.glb', thumbnail: '👩' },
+  { id: 'anime_3', name: 'Anime Girl B', url: '/models/anime_girl_3.glb', thumbnail: '💃' },
+];
+
+type EditorCategory = 'avatar' | 'body' | 'face' | 'inventory';
 
 const CATEGORY_CONFIG: { id: EditorCategory; label: string; icon: typeof User }[] = [
+  { id: 'avatar', label: 'Avatar', icon: User },
   { id: 'inventory', label: 'Inventar', icon: Package },
   { id: 'body', label: 'Koerper', icon: User },
   { id: 'face', label: 'Gesicht', icon: Smile },
@@ -199,7 +272,7 @@ function getItemName(slot: ClothingTab, id: string): string {
 
 // ─── Component ──────────────────────────────────────────────────────
 export function LockerRoom({ profile, username, onSave, onBack }: LockerRoomProps) {
-  const [activeCategory, setActiveCategory] = useState<EditorCategory>('body');
+  const [activeCategory, setActiveCategory] = useState<EditorCategory>('avatar');
   const [activeTab, setActiveTab] = useState<ClothingTab | 'sets'>('jacket');
   const [tempProfile, setTempProfile] = useState<PlayerProfile>({
     ...profile,
@@ -222,16 +295,15 @@ export function LockerRoom({ profile, username, onSave, onBack }: LockerRoomProp
   const expNeeded = tempProfile.level * 1000;
   const progress = (tempProfile.exp / expNeeded) * 100;
 
-  // Build dynamic wardrobe based on purchased items
+  // Build dynamic wardrobe — all base WARDROBE items visible (level-gated), plus purchased shop items
   const dynamicWardrobe = useMemo(() => {
-    const defaultStarters = ['none', 'leather_black', 'denim_blue', 'shoes_sneakers'];
     const ownedIds = new Set(getOwnedItems().map(o => o.itemId));
-    
+
     const result: Record<string, WardrobeItem[]> = {};
-    
-    // Default categories
+
+    // All wardrobe items (level requirement controls access)
     for (const key in WARDROBE) {
-      result[key] = (WARDROBE[key as ClothingTab] || []).filter(item => defaultStarters.includes(item.id));
+      result[key] = [...(WARDROBE[key as ClothingTab] || [])];
     }
     
     // Sets category
@@ -415,144 +487,468 @@ export function LockerRoom({ profile, username, onSave, onBack }: LockerRoomProp
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6">
 
+          {/* ═══ ANIME AVATAR SELECTOR ═══ */}
+          {activeCategory === 'avatar' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-cyan-400 uppercase tracking-widest">Anime Avatar</h2>
+              <p className="text-purple-400 text-sm">Wähle einen Anime-Charakter oder nutze den Custom-Avatar mit eigenen Einstellungen.</p>
+
+              <div className="grid grid-cols-2 gap-4">
+                {ANIME_AVATARS.map(avatar => {
+                  const isSelected = avatar.url === (tempProfile.rpm_url || '');
+                  return (
+                    <button
+                      key={avatar.id}
+                      onClick={() => save({ ...tempProfile, rpm_url: avatar.url || undefined })}
+                      className={`p-5 rounded-2xl border-2 transition-all text-left ${
+                        isSelected
+                          ? 'border-pink-400 bg-pink-900/30 shadow-[0_0_25px_rgba(236,72,153,0.3)]'
+                          : 'border-purple-700/30 bg-purple-900/20 hover:border-purple-500/50'
+                      }`}
+                    >
+                      <div className="text-4xl mb-2">{avatar.thumbnail}</div>
+                      <div className="font-black text-white text-sm uppercase tracking-wider">{avatar.name}</div>
+                      {avatar.url && (
+                        <div className="text-[10px] text-purple-500 font-bold mt-1 uppercase tracking-wider">CC0 • VRoid Studio</div>
+                      )}
+                      {isSelected && (
+                        <div className="mt-2 px-3 py-1 bg-pink-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full inline-block">
+                          AUSGEWÄHLT
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="p-4 bg-purple-900/30 border border-purple-700/20 rounded-2xl">
+                <p className="text-purple-400 text-xs font-bold">
+                  💡 Anime-Modelle sind CC0 (Public Domain) von OpenGameArt.org / VRoid Studio.
+                  Wähle "Procedural (Custom)" um Körper, Gesicht und Kleidung individuell anzupassen.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ═══ BODY EDITOR ═══ */}
           {activeCategory === 'body' && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 uppercase tracking-widest">Koerper</h2>
 
-              {/* Gender */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Geschlecht</label>
-                <div className="flex gap-3">
-                  {(['male', 'female'] as const).map(g => (
-                    <button key={g} onClick={() => handleBodyChange('gender', g)}
-                      className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-wider text-sm transition-all ${
-                        tempProfile.body.gender === g
-                          ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
-                          : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
-                      }`}>
-                      {g === 'male' ? 'Maennlich' : 'Weiblich'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sliders */}
-              {[
-                { key: 'height' as const, label: 'Groesse', min: 0.8, max: 1.2, step: 0.05 },
-                { key: 'muscles' as const, label: 'Muskeln', min: 0, max: 1, step: 0.1 },
-                { key: 'bodyFat' as const, label: 'Koerperfett', min: 0, max: 1, step: 0.1 },
-                { key: 'headSize' as const, label: 'Kopfgroesse', min: 0.7, max: 1.3, step: 0.05 },
-              ].map(slider => (
-                <div key={slider.key}>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest">{slider.label}</label>
-                    <span className="text-xs font-mono text-gray-400">{tempProfile.body[slider.key].toFixed(2)}</span>
+              {/* ── Grundform ── */}
+              <details open className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Grundform</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-5">
+                  {/* Gender */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Geschlecht</label>
+                    <div className="flex gap-3">
+                      {(['male', 'female'] as const).map(g => (
+                        <button key={g} onClick={() => handleBodyChange('gender', g)}
+                          className={`flex-1 py-3 rounded-2xl font-black uppercase tracking-wider text-sm transition-all ${
+                            tempProfile.body.gender === g
+                              ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                              : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                          }`}>
+                          {g === 'male' ? 'Maennlich' : 'Weiblich'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <input type="range" min={slider.min} max={slider.max} step={slider.step}
-                    value={tempProfile.body[slider.key]}
-                    onChange={e => handleBodyChange(slider.key, parseFloat(e.target.value))}
-                    className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
-                  />
+                  {[
+                    { key: 'height' as const, label: 'Groesse', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'muscles' as const, label: 'Muskeln', min: 0, max: 1, step: 0.1 },
+                    { key: 'bodyFat' as const, label: 'Koerperfett', min: 0, max: 1, step: 0.1 },
+                    { key: 'headSize' as const, label: 'Kopfgroesse', min: 0.7, max: 1.3, step: 0.05 },
+                  ].map(slider => (
+                    <div key={slider.key}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-black text-purple-400 uppercase tracking-widest">{slider.label}</label>
+                        <span className="text-xs font-mono text-gray-400">{tempProfile.body[slider.key].toFixed(2)}</span>
+                      </div>
+                      <input type="range" min={slider.min} max={slider.max} step={slider.step}
+                        value={tempProfile.body[slider.key]}
+                        onChange={e => handleBodyChange(slider.key, parseFloat(e.target.value))}
+                        className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
+                      />
+                    </div>
+                  ))}
+                  {/* Skin Color with Picker */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Hautfarbe</label>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {SKIN_COLORS.map(color => (
+                        <button key={color} onClick={() => handleBodyChange('skinColor', color)}
+                          className={`w-10 h-10 rounded-xl transition-all ${tempProfile.body.skinColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <label className="relative w-10 h-10 rounded-xl ring-2 ring-purple-500 hover:ring-pink-400 cursor-pointer transition-all overflow-hidden" title="Eigene Farbe">
+                        <input type="color" value={tempProfile.body.skinColor}
+                          onChange={e => handleBodyChange('skinColor', e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-pink-600">
+                          <Palette size={16} className="text-white" />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              </details>
 
-              {/* Skin Color */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Hautfarbe</label>
-                <div className="flex gap-3 flex-wrap">
-                  {SKIN_COLORS.map(color => (
-                    <button key={color} onClick={() => handleBodyChange('skinColor', color)}
-                      className={`w-12 h-12 rounded-xl transition-all ${tempProfile.body.skinColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
-                      style={{ backgroundColor: color }}
-                    />
+              {/* ── Proportionen ── */}
+              <details className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Proportionen</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-5">
+                  {[
+                    { key: 'shoulderWidth' as const, label: 'Schulterbreite', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'hipWidth' as const, label: 'Hueftbreite', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'armLength' as const, label: 'Armlaenge', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'legLength' as const, label: 'Beinlaenge', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'neckLength' as const, label: 'Halslaenge', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'neckThickness' as const, label: 'Halsdicke', min: 0.8, max: 1.2, step: 0.05 },
+                  ].map(slider => (
+                    <div key={slider.key}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-black text-purple-400 uppercase tracking-widest">{slider.label}</label>
+                        <span className="text-xs font-mono text-gray-400">{(tempProfile.body[slider.key] ?? 1).toFixed(2)}</span>
+                      </div>
+                      <input type="range" min={slider.min} max={slider.max} step={slider.step}
+                        value={tempProfile.body[slider.key] ?? 1}
+                        onChange={e => handleBodyChange(slider.key, parseFloat(e.target.value))}
+                        className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
+                      />
+                    </div>
                   ))}
                 </div>
-              </div>
+              </details>
             </div>
           )}
 
           {/* ═══ FACE EDITOR ═══ */}
           {activeCategory === 'face' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 uppercase tracking-widest">Gesicht & Mimik</h2>
+            <div className="space-y-4">
+              <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 uppercase tracking-widest">Gesicht</h2>
 
-              {/* Eye Style */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Augenstil</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['normal', 'happy', 'cool', 'angry', 'sad', 'wink'] as const).map(style => (
-                    <button key={style} onClick={() => handleFaceChange('eyeStyle', style)}
-                      className={`py-3 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
-                        tempProfile.face.eyeStyle === style
-                          ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
-                          : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
-                      }`}>
-                      {style === 'normal' ? 'Normal' : style === 'happy' ? 'Froehlich' : style === 'cool' ? 'Cool' : style === 'angry' ? 'Wuetend' : style === 'sad' ? 'Traurig' : 'Zwinkern'}
-                    </button>
+              {/* ── Haare ── */}
+              <details open className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Haare</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  <div className="grid grid-cols-5 gap-2">
+                    {([
+                      { id: 'none' as const, label: 'Glatze', icon: '🪨' },
+                      { id: 'short' as const, label: 'Kurz', icon: '✂️' },
+                      { id: 'long' as const, label: 'Lang', icon: '💇' },
+                      { id: 'spike' as const, label: 'Spikes', icon: '⚡' },
+                      { id: 'ponytail' as const, label: 'Zopf', icon: '🎀' },
+                      { id: 'bob' as const, label: 'Bob', icon: '💁' },
+                      { id: 'twintails' as const, label: 'Twintails', icon: '🎐' },
+                      { id: 'braid' as const, label: 'Geflochten', icon: '🪢' },
+                      { id: 'afro' as const, label: 'Afro', icon: '🌀' },
+                      { id: 'mohawk' as const, label: 'Mohawk', icon: '🦎' },
+                      { id: 'sideshave' as const, label: 'Sidecut', icon: '🔪' },
+                      { id: 'curly' as const, label: 'Locken', icon: '🌸' },
+                      { id: 'wavy' as const, label: 'Wellig', icon: '🌊' },
+                      { id: 'bun' as const, label: 'Dutt', icon: '🍡' },
+                      { id: 'pigtails' as const, label: 'Zoepfe', icon: '🎗️' },
+                    ]).map(style => (
+                      <button key={style.id} onClick={() => handleFaceChange('hairStyle', style.id)}
+                        className={`py-2 px-1 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex flex-col items-center gap-1 ${
+                          tempProfile.face.hairStyle === style.id
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                            : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                        }`}>
+                        <span className="text-lg">{style.icon}</span>
+                        {style.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Hair Color + Picker */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Haarfarbe</label>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {['#1f2937', '#fcd34d', '#ea580c', '#b91c1c', '#f472b6', '#3b82f6', '#22c55e', '#d1d5db', '#8b5cf6', '#ffffff', '#ff6b35', '#2d1b4e'].map(color => (
+                        <button key={color} onClick={() => handleFaceChange('hairColor', color)}
+                          className={`w-9 h-9 rounded-full transition-all ${tempProfile.face.hairColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <label className="relative w-9 h-9 rounded-full ring-2 ring-purple-500 hover:ring-pink-400 cursor-pointer transition-all overflow-hidden" title="Eigene Farbe">
+                        <input type="color" value={tempProfile.face.hairColor}
+                          onChange={e => handleFaceChange('hairColor', e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-pink-600">
+                          <Palette size={12} className="text-white" />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              {/* ── Augen ── */}
+              <details open className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Augen</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['normal', 'happy', 'cool', 'angry', 'sad', 'wink'] as const).map(style => (
+                      <button key={style} onClick={() => handleFaceChange('eyeStyle', style)}
+                        className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                          tempProfile.face.eyeStyle === style
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                            : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                        }`}>
+                        {style === 'normal' ? 'Normal' : style === 'happy' ? 'Froehlich' : style === 'cool' ? 'Cool' : style === 'angry' ? 'Wuetend' : style === 'sad' ? 'Traurig' : 'Zwinkern'}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Eye Color + Picker */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Augenfarbe</label>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {EYE_COLORS.map(color => (
+                        <button key={color} onClick={() => handleFaceChange('eyeColor', color)}
+                          className={`w-9 h-9 rounded-full transition-all ${tempProfile.face.eyeColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <label className="relative w-9 h-9 rounded-full ring-2 ring-purple-500 hover:ring-pink-400 cursor-pointer transition-all overflow-hidden" title="Eigene Farbe">
+                        <input type="color" value={tempProfile.face.eyeColor}
+                          onChange={e => handleFaceChange('eyeColor', e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-pink-600">
+                          <Palette size={12} className="text-white" />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                  {/* Eye Spacing + Size */}
+                  {[
+                    { key: 'eyeSpacing' as const, label: 'Augenabstand', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'eyeSize' as const, label: 'Augengroesse', min: 0.7, max: 1.3, step: 0.05 },
+                  ].map(slider => (
+                    <div key={slider.key}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-black text-purple-400 uppercase tracking-widest">{slider.label}</label>
+                        <span className="text-xs font-mono text-gray-400">{(tempProfile.face[slider.key] ?? 1).toFixed(2)}</span>
+                      </div>
+                      <input type="range" min={slider.min} max={slider.max} step={slider.step}
+                        value={tempProfile.face[slider.key] ?? 1}
+                        onChange={e => handleFaceChange(slider.key, parseFloat(e.target.value))}
+                        className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
+                      />
+                    </div>
                   ))}
                 </div>
-              </div>
+              </details>
 
-              {/* Eye Color */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Augenfarbe</label>
-                <div className="flex gap-3 flex-wrap">
-                  {EYE_COLORS.map(color => (
-                    <button key={color} onClick={() => handleFaceChange('eyeColor', color)}
-                      className={`w-12 h-12 rounded-full transition-all ${tempProfile.face.eyeColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
-                      style={{ backgroundColor: color }}
+              {/* ── Augenbrauen ── */}
+              <details className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Augenbrauen</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['none', 'thin', 'thick', 'arched', 'straight', 'bushy'] as const).map(style => (
+                      <button key={style} onClick={() => handleFaceChange('eyebrowStyle', style)}
+                        className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                          tempProfile.face.eyebrowStyle === style
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                            : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                        }`}>
+                        {style === 'none' ? 'Keine' : style === 'thin' ? 'Duenn' : style === 'thick' ? 'Dick' : style === 'arched' ? 'Gebogen' : style === 'straight' ? 'Gerade' : 'Buschig'}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Eyebrow Color + Picker */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Brauenfarbe</label>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {['#1f2937', '#fcd34d', '#ea580c', '#b91c1c', '#8b5cf6', '#d1d5db'].map(color => (
+                        <button key={color} onClick={() => handleFaceChange('eyebrowColor', color)}
+                          className={`w-9 h-9 rounded-full transition-all ${tempProfile.face.eyebrowColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <label className="relative w-9 h-9 rounded-full ring-2 ring-purple-500 hover:ring-pink-400 cursor-pointer transition-all overflow-hidden" title="Eigene Farbe">
+                        <input type="color" value={tempProfile.face.eyebrowColor ?? tempProfile.face.hairColor}
+                          onChange={e => handleFaceChange('eyebrowColor', e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-pink-600">
+                          <Palette size={12} className="text-white" />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                  {/* Thickness */}
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Brauendicke</label>
+                      <span className="text-xs font-mono text-gray-400">{(tempProfile.face.eyebrowThickness ?? 1).toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={0.5} max={1.5} step={0.1}
+                      value={tempProfile.face.eyebrowThickness ?? 1}
+                      onChange={e => handleFaceChange('eyebrowThickness', parseFloat(e.target.value))}
+                      className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
                     />
-                  ))}
+                  </div>
                 </div>
-              </div>
+              </details>
 
-              {/* Hair Style */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Frisur</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['none', 'short', 'long', 'spike', 'ponytail'] as const).map(style => (
-                    <button key={style} onClick={() => handleFaceChange('hairStyle', style)}
-                      className={`py-3 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
-                        tempProfile.face.hairStyle === style
-                          ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
-                          : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
-                      }`}>
-                      {style === 'none' ? 'Glatze' : style === 'short' ? 'Kurz' : style === 'long' ? 'Lang' : style === 'spike' ? 'Spikes' : 'Zopf'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Hair Color */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Haarfarbe</label>
-                <div className="flex gap-3 flex-wrap">
-                  {['#1f2937', '#fcd34d', '#ea580c', '#b91c1c', '#f472b6', '#3b82f6', '#22c55e', '#d1d5db'].map(color => (
-                    <button key={color} onClick={() => handleFaceChange('hairColor', color)}
-                      className={`w-12 h-12 rounded-full transition-all ${tempProfile.face.hairColor === color ? 'ring-4 ring-pink-500 scale-110' : 'ring-2 ring-gray-700 hover:ring-gray-500'}`}
-                      style={{ backgroundColor: color }}
+              {/* ── Nase ── */}
+              <details className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Nase</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['button', 'pointed', 'wide', 'flat'] as const).map(shape => (
+                      <button key={shape} onClick={() => handleFaceChange('noseShape', shape)}
+                        className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                          tempProfile.face.noseShape === shape
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                            : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                        }`}>
+                        {shape === 'button' ? 'Stupsnase' : shape === 'pointed' ? 'Spitz' : shape === 'wide' ? 'Breit' : 'Flach'}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Nasengroesse</label>
+                      <span className="text-xs font-mono text-gray-400">{(tempProfile.face.noseSize ?? 1).toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={0.5} max={1.5} step={0.1}
+                      value={tempProfile.face.noseSize ?? 1}
+                      onChange={e => handleFaceChange('noseSize', parseFloat(e.target.value))}
+                      className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
                     />
-                  ))}
+                  </div>
                 </div>
-              </div>
+              </details>
 
-              {/* Mouth Style */}
-              <div>
-                <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-3 block">Mundform</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['smile', 'neutral', 'open', 'grin', 'pout'] as const).map(style => (
-                    <button key={style} onClick={() => handleFaceChange('mouthStyle', style)}
-                      className={`py-3 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
-                        tempProfile.face.mouthStyle === style
-                          ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
-                          : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
-                      }`}>
-                      {style === 'smile' ? 'Laecheln' : style === 'neutral' ? 'Neutral' : style === 'open' ? 'Offen' : style === 'grin' ? 'Grinsen' : 'Schmollmund'}
-                    </button>
-                  ))}
+              {/* ── Mund ── */}
+              <details className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Mund</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['smile', 'neutral', 'open', 'grin', 'pout'] as const).map(style => (
+                      <button key={style} onClick={() => handleFaceChange('mouthStyle', style)}
+                        className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                          tempProfile.face.mouthStyle === style
+                            ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                            : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                        }`}>
+                        {style === 'smile' ? 'Laecheln' : style === 'neutral' ? 'Neutral' : style === 'open' ? 'Offen' : style === 'grin' ? 'Grinsen' : 'Schmollmund'}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Lippendicke</label>
+                      <span className="text-xs font-mono text-gray-400">{(tempProfile.face.lipThickness ?? 1).toFixed(2)}</span>
+                    </div>
+                    <input type="range" min={0.5} max={1.5} step={0.1}
+                      value={tempProfile.face.lipThickness ?? 1}
+                      onChange={e => handleFaceChange('lipThickness', parseFloat(e.target.value))}
+                      className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
+                    />
+                  </div>
                 </div>
-              </div>
+              </details>
+
+              {/* ── Gesichtsform ── */}
+              <details className="group bg-purple-900/20 border border-purple-700/30 rounded-2xl overflow-hidden">
+                <summary className="cursor-pointer flex items-center justify-between px-5 py-3 hover:bg-purple-900/30 transition-colors">
+                  <span className="text-xs font-black text-pink-400 uppercase tracking-widest">Gesichtsform</span>
+                  <ChevronDown size={16} className="text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-5 pb-5 space-y-4">
+                  {/* Chin Shape */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Kinnform</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['round', 'square', 'pointed'] as const).map(shape => (
+                        <button key={shape} onClick={() => handleFaceChange('chinShape', shape)}
+                          className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                            tempProfile.face.chinShape === shape
+                              ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                              : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                          }`}>
+                          {shape === 'round' ? 'Rund' : shape === 'square' ? 'Eckig' : 'Spitz'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Ear Shape */}
+                  <div>
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest mb-2 block">Ohrenform</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['round', 'pointed', 'small'] as const).map(shape => (
+                        <button key={shape} onClick={() => handleFaceChange('earShape', shape)}
+                          className={`py-2.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-all ${
+                            tempProfile.face.earShape === shape
+                              ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white border border-pink-400/50'
+                              : 'bg-purple-900/30 text-gray-400 border border-purple-700/30 hover:bg-purple-900/50'
+                          }`}>
+                          {shape === 'round' ? 'Rund' : shape === 'pointed' ? 'Spitz (Elf)' : 'Klein'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Sliders */}
+                  {[
+                    { key: 'foreheadHeight' as const, label: 'Stirnhoehe', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'cheekWidth' as const, label: 'Wangenbreite', min: 0.8, max: 1.2, step: 0.05 },
+                    { key: 'earSize' as const, label: 'Ohrengroesse', min: 0.5, max: 1.5, step: 0.1 },
+                  ].map(slider => (
+                    <div key={slider.key}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-black text-purple-400 uppercase tracking-widest">{slider.label}</label>
+                        <span className="text-xs font-mono text-gray-400">{(tempProfile.face[slider.key] ?? 1).toFixed(2)}</span>
+                      </div>
+                      <input type="range" min={slider.min} max={slider.max} step={slider.step}
+                        value={tempProfile.face[slider.key] ?? 1}
+                        onChange={e => handleFaceChange(slider.key, parseFloat(e.target.value))}
+                        className="w-full h-2 bg-purple-900 rounded-full appearance-none cursor-pointer accent-pink-500"
+                      />
+                    </div>
+                  ))}
+                  {/* Freckles */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-purple-400 uppercase tracking-widest">Sommersprossen</label>
+                    <button onClick={() => handleFaceChange('freckles', !tempProfile.face.freckles)}
+                      className={`w-14 h-7 rounded-full transition-all relative ${
+                        tempProfile.face.freckles ? 'bg-pink-500' : 'bg-purple-900'
+                      }`}>
+                      <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${
+                        tempProfile.face.freckles ? 'left-8' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
+              </details>
             </div>
           )}
 
@@ -609,7 +1005,9 @@ export function LockerRoom({ profile, username, onSave, onBack }: LockerRoomProp
                               </span>
                             </div>
                           )}
-                          <div className={`w-14 h-14 rounded-xl ${item.preview} shadow-lg group-hover:scale-110 transition-transform`} />
+                          <div className={`w-14 h-14 rounded-xl ${item.preview} shadow-lg group-hover:scale-110 transition-transform flex items-center justify-center`}>
+                            {item.icon && <span className="text-2xl drop-shadow-md">{item.icon}</span>}
+                          </div>
                           <span className="font-bold text-gray-300 uppercase tracking-wider text-[10px] text-center leading-tight">{item.name}</span>
                           {isEquipped && <span className="absolute top-2 right-2 text-pink-400"><Check size={16} /></span>}
                         </button>

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Users, ArrowLeft, Shirt, LogOut, ShoppingBag, Coins, UserCircle, Heart, Trophy, Gift, ShieldAlert } from 'lucide-react';
+import { Play, Users, ArrowLeft, Shirt, LogOut, ShoppingBag, Coins, UserCircle, Heart, Trophy, Gift, ShieldAlert, Music, Zap } from 'lucide-react';
 import Game from './components/Game';
 import { PlaylistManager } from './components/PlaylistManager';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { RoomBrowser } from './components/RoomBrowser';
 import { LockerRoom, PlayerProfile, DEFAULT_BODY, DEFAULT_FACE } from './components/LockerRoom';
 import { Auth } from './components/Auth';
+import { AnimatedAvatar } from './components/AnimatedAvatar';
 import { FashionShop } from './components/FashionShop';
 import { WalletView } from './components/WalletView';
 import { ModeSelect } from './components/ModeSelect';
@@ -261,12 +262,13 @@ export default function App() {
       const { effect, accessory, body, ...rest } = newProfile;
       const patchedBody = typeof body === 'object' ? { ...body, _effect: effect, _accessory: accessory } : body;
 
-      await supabase.from('profiles').upsert({ 
-        id: session.user.id, 
+      const { error } = await supabase.from('profiles').upsert({
+        id: session.user.id,
         username: newUsername || username,
         body: patchedBody,
-        ...rest 
+        ...rest
       });
+      if (error) console.warn('[Profile] Save failed, will retry on next update:', error.message);
     }
   };
 
@@ -441,11 +443,29 @@ export default function App() {
     <ErrorBoundary>
     <div className="min-h-screen bg-[#1a0a2e] text-white font-sans selection:bg-pink-500/30 flex flex-col items-center justify-center p-6 relative overflow-x-hidden">
 
-      {/* Audition-style animated background */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-40">
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-pink-600/25 rounded-full blur-[150px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[150px] mix-blend-screen animate-pulse" style={{ animationDuration: '6s' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[120px]" />
+      {/* Audition-style FLASHY animated background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Moving color blobs */}
+        <div className="absolute top-[10%] left-[15%] w-[700px] h-[700px] bg-pink-600/20 rounded-full blur-[180px] mix-blend-screen animate-pulse" style={{ animationDuration: '3s' }} />
+        <div className="absolute bottom-[10%] right-[15%] w-[700px] h-[700px] bg-purple-600/15 rounded-full blur-[180px] mix-blend-screen animate-pulse" style={{ animationDuration: '5s' }} />
+        <div className="absolute top-[40%] left-[50%] -translate-x-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '4s' }} />
+
+        {/* Disco floor grid at bottom */}
+        <div className="absolute bottom-0 left-0 w-full h-[40%] opacity-20" style={{ perspective: '600px' }}>
+          <div className="w-full h-full" style={{ transform: 'rotateX(60deg)', transformOrigin: 'bottom center' }}>
+            <div className="w-full h-full" style={{
+              backgroundImage: 'repeating-linear-gradient(0deg, rgba(168,85,247,0.15) 0px, transparent 1px, transparent 60px), repeating-linear-gradient(90deg, rgba(236,72,153,0.1) 0px, transparent 1px, transparent 60px)',
+              backgroundSize: '60px 60px',
+            }} />
+          </div>
+        </div>
+
+        {/* Side neon strips */}
+        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-pink-500/40 to-transparent" />
+        <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-transparent via-cyan-500/40 to-transparent" />
+
+        {/* Top light beam */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gradient-to-b from-purple-500/5 to-transparent" style={{ clipPath: 'polygon(40% 0%, 60% 0%, 80% 100%, 20% 100%)' }} />
       </div>
 
       {requireAuth ? (
@@ -494,150 +514,174 @@ export default function App() {
 
           <AnimatePresence mode="wait">
             {view === 'menu' && (
-              <motion.div 
+              <motion.div
                 key="menu"
                 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-                className="w-full max-w-5xl z-10 flex flex-col items-center"
+                className="w-full max-w-6xl z-10 flex flex-col items-center"
               >
-                <div className="text-center mb-16 relative">
-                  <h1 className="text-7xl md:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-pink-400 via-purple-400 to-cyan-400 text-glow-pink">
-                    AUDITION
-                  </h1>
-                  <p className="text-pink-300/60 text-sm tracking-[0.5em] font-black mt-2 uppercase">Online Dance Battle</p>
-                  <div className="flex items-center justify-center gap-4 mt-6">
-                    <p className="text-gray-300 text-xl tracking-[0.4em] font-black border border-pink-500/30 inline-block px-10 py-3 rounded-full bg-purple-950/50 backdrop-blur-md shadow-2xl">
-                      LEVEL <span className="text-yellow-400 text-glow-gold">{profile.level}</span> DANCER
-                    </p>
+                {/* ═══ TITLE + AVATAR HEADER ═══ */}
+                <div className="w-full flex items-center justify-between mb-8">
+                  {/* Left: Avatar Preview */}
+                  <div className="w-48 h-64 rounded-3xl overflow-hidden border-2 border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.2)] bg-gradient-to-b from-purple-900/40 to-black/40 relative flex-shrink-0">
+                    <AnimatedAvatar
+                      modelUrl={profile.rpm_url}
+                      jacket={profile.jacket} tshirt={profile.tshirt} vest={profile.vest}
+                      pants={profile.pants} shorts={profile.shorts} shoes={profile.shoes}
+                      hat={profile.hat} glasses={profile.glasses}
+                      beard={profile.beard} mustache={profile.mustache} wings={profile.wings}
+                      effect={profile.effect} accessory={profile.accessory}
+                      body={profile.body} face={profile.face}
+                      danceState="dancing"
+                      intensity={1.5}
+                      bpm={120}
+                    />
+                    {/* Neon ring at bottom */}
+                    <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-purple-500/20 to-transparent" />
+                  </div>
+
+                  {/* Center: Title */}
+                  <div className="text-center flex-1 px-6 relative">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[200px] bg-pink-500/10 rounded-full blur-[100px] pointer-events-none" />
+                    <h1 className="text-7xl md:text-[9rem] font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-pink-300 via-pink-500 to-purple-600 leading-none relative" style={{ WebkitTextStroke: '1px rgba(255,105,180,0.3)' }}>
+                      AUDITION
+                    </h1>
+                    <div className="flex items-center justify-center gap-3 -mt-1">
+                      <div className="h-px flex-1 max-w-24 bg-gradient-to-r from-transparent to-pink-500/50" />
+                      <p className="text-pink-400 text-xs tracking-[0.6em] font-black uppercase animate-neon">
+                        Online Dance Battle
+                      </p>
+                      <div className="h-px flex-1 max-w-24 bg-gradient-to-l from-transparent to-pink-500/50" />
+                    </div>
+                  </div>
+
+                  {/* Right: Player Info Panel */}
+                  <div className="flex-shrink-0 panel-audition px-6 py-5 flex flex-col items-center gap-3 min-w-[180px]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-400 text-[10px] font-black uppercase tracking-widest">Level</span>
+                      <span className="text-3xl font-black text-yellow-400 text-glow-gold">{profile.level}</span>
+                    </div>
+                    <div className="w-full h-px bg-purple-700/50" />
+                    <span className="text-white font-black text-sm tracking-widest uppercase">{username}</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-900/30 border border-yellow-500/20 rounded-full">
+                      <Coins size={14} className="text-yellow-400" />
+                      <span className="text-yellow-300 font-black text-sm">{walletBeats.toLocaleString()}</span>
+                      <span className="text-yellow-600 text-[8px] font-bold uppercase">Beats</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-6 w-full max-w-5xl">
-                   
-                   {/* ROW 1: GAME MODES */}
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('mode_select')}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-pink-500/30 hover:border-pink-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(236,72,153,0.4)] transition-all group relative overflow-hidden flex items-center">
-                      <div className="absolute right-0 top-0 w-32 h-32 bg-pink-500/10 rounded-full blur-2xl group-hover:bg-pink-500/30 transition-all" />
-                      <div className="bg-gradient-to-br from-pink-500 to-purple-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.4)] shrink-0 mr-6">
-                        <Play className="w-6 h-6 ml-1" fill="currentColor" />
+                <div className="flex flex-col gap-4 w-full max-w-6xl">
+
+                   {/* ═══ ROW 1: MAIN GAME BUTTONS — BIG & FLASHY ═══ */}
+                   <div className="grid grid-cols-2 gap-4">
+                    <motion.div whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.96 }} onClick={() => setView('mode_select')}
+                      className="panel-audition relative overflow-hidden p-6 cursor-pointer hover:shadow-[0_0_40px_rgba(236,72,153,0.4)] transition-all group flex items-center gap-5">
+                      <div className="absolute inset-0 bg-gradient-to-r from-pink-500/0 via-pink-500/5 to-pink-500/0 group-hover:via-pink-500/15 transition-all" />
+                      <div className="bg-gradient-to-br from-pink-500 to-purple-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(236,72,153,0.5)] shrink-0 relative">
+                        <Play className="w-7 h-7 ml-1" fill="currentColor" />
+                        <div className="absolute -inset-1 rounded-2xl border border-pink-400/30 group-hover:border-pink-400/60 transition-all" />
                       </div>
-                      <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-widest leading-none mb-1">Singleplayer</h3>
-                        <p className="text-pink-300/60 font-bold text-xs uppercase tracking-wider">WÄHLE DEINEN SPIELMODUS</p>
+                      <div className="relative">
+                        <h3 className="text-2xl font-black text-white uppercase tracking-wider leading-none mb-1">Singleplayer</h3>
+                        <p className="text-pink-300/50 font-bold text-[11px] uppercase tracking-wider">Wähle deinen Spielmodus</p>
+                      </div>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-pink-500/20 group-hover:text-pink-400/40 transition-all">
+                        <Music size={48} />
                       </div>
                     </motion.div>
 
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('lobby')}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-cyan-500/30 hover:border-cyan-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-all group relative overflow-hidden flex items-center">
-                      <div className="absolute right-0 top-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/30 transition-all" />
-                      <div className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)] shrink-0 mr-6">
-                        <Users className="w-6 h-6" fill="currentColor" />
+                    <motion.div whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.96 }} onClick={() => setView('lobby')}
+                      className="panel-audition relative overflow-hidden p-6 cursor-pointer hover:shadow-[0_0_40px_rgba(6,182,212,0.4)] transition-all group flex items-center gap-5">
+                      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-500/5 to-cyan-500/0 group-hover:via-cyan-500/15 transition-all" />
+                      <div className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.5)] shrink-0 relative">
+                        <Users className="w-7 h-7" />
+                        <div className="absolute -inset-1 rounded-2xl border border-cyan-400/30 group-hover:border-cyan-400/60 transition-all" />
                       </div>
-                      <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-widest leading-none mb-1">Multiplayer</h3>
-                        <p className="text-cyan-300/60 font-bold text-xs uppercase tracking-wider">TRITT GEGEN ANDERE AN</p>
+                      <div className="relative">
+                        <h3 className="text-2xl font-black text-white uppercase tracking-wider leading-none mb-1">Multiplayer</h3>
+                        <p className="text-cyan-300/50 font-bold text-[11px] uppercase tracking-wider">Tritt gegen andere an!</p>
+                      </div>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-500/20 group-hover:text-cyan-400/40 transition-all">
+                        <Zap size={48} />
                       </div>
                     </motion.div>
                    </div>
 
-                   {/* ROW 2: FASHION SHOP (NEW!) + WALLET */}
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('shop')}
-                      className="bg-gradient-to-br from-pink-950/40 to-purple-950/40 backdrop-blur-xl border border-pink-500/30 hover:border-pink-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(236,72,153,0.4)] transition-all group relative overflow-hidden flex items-center">
-                      <div className="absolute right-0 top-0 w-40 h-40 bg-pink-500/10 rounded-full blur-2xl group-hover:bg-pink-500/30 transition-all" />
-                      <div className="absolute left-0 bottom-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl" />
-                      <div className="bg-gradient-to-br from-pink-500 to-purple-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.4)] shrink-0 mr-6">
-                        <ShoppingBag className="w-6 h-6" />
+                   {/* ═══ ROW 2: SHOP + WARDROBE + WALLET ═══ */}
+                   <div className="grid grid-cols-3 gap-4">
+                    <motion.div whileHover={{ y: -3, scale: 1.02 }} whileTap={{ scale: 0.96 }} onClick={() => setView('shop')}
+                      className="panel-audition relative overflow-hidden p-5 cursor-pointer hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] transition-all group flex items-center gap-4">
+                      <div className="bg-gradient-to-br from-pink-500 to-purple-600 text-white w-12 h-12 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] shrink-0">
+                        <ShoppingBag className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-widest leading-none mb-1">Fashion Shop</h3>
-                        <p className="text-pink-300/60 font-bold text-xs uppercase tracking-wider">JACKEN, SCHUHE, EFFEKTE & MEHR</p>
+                        <h3 className="text-base font-black text-white uppercase tracking-wider leading-none mb-0.5">Fashion Shop</h3>
+                        <p className="text-pink-300/40 font-bold text-[10px] uppercase tracking-wider">Jacken, Schuhe, Effekte</p>
                       </div>
-                      <span className="absolute top-4 right-6 px-3 py-1 bg-gradient-to-r from-pink-500 to-orange-500 text-[9px] font-black uppercase tracking-widest rounded-full text-white shadow-[0_0_10px_rgba(236,72,153,0.5)] animate-pulse">
+                      <span className="absolute top-2 right-3 px-2 py-0.5 bg-gradient-to-r from-pink-500 to-orange-500 text-[8px] font-black uppercase tracking-widest rounded-full text-white shadow-[0_0_8px_rgba(236,72,153,0.5)] animate-pulse">
                         NEU
                       </span>
                     </motion.div>
 
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('wallet')}
-                      className="bg-gradient-to-br from-yellow-950/30 to-amber-950/30 backdrop-blur-xl border border-yellow-500/20 hover:border-yellow-400/50 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(250,204,21,0.3)] transition-all group relative overflow-hidden flex items-center">
-                      <div className="absolute right-0 top-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-2xl group-hover:bg-yellow-500/20 transition-all" />
-                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.4)] shrink-0 mr-6">
-                        <Coins className="w-6 h-6" />
+                    <motion.div whileHover={{ y: -3, scale: 1.02 }} whileTap={{ scale: 0.96 }} onClick={() => setView('locker')}
+                      className="panel-audition relative overflow-hidden p-5 cursor-pointer hover:shadow-[0_0_30px_rgba(250,204,21,0.3)] transition-all group flex items-center gap-4">
+                      <div className="bg-gradient-to-br from-yellow-400 to-amber-500 text-black w-12 h-12 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.4)] shrink-0">
+                        <Shirt className="w-5 h-5" fill="currentColor" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-widest leading-none mb-1">Wallet</h3>
-                        <p className="text-yellow-400/60 font-bold text-xs uppercase tracking-wider">
-                          <span className="text-yellow-300 text-lg font-black mr-1">{walletBeats.toLocaleString()}</span> BEATS GUTHABEN
+                        <h3 className="text-base font-black text-white uppercase tracking-wider leading-none mb-0.5">Garderobe</h3>
+                        <p className="text-yellow-400/40 font-bold text-[10px] uppercase tracking-wider">Outfit anpassen</p>
+                      </div>
+                    </motion.div>
+
+                    <motion.div whileHover={{ y: -3, scale: 1.02 }} whileTap={{ scale: 0.96 }} onClick={() => setView('wallet')}
+                      className="panel-audition relative overflow-hidden p-5 cursor-pointer hover:shadow-[0_0_30px_rgba(250,204,21,0.2)] transition-all group flex items-center gap-4">
+                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 text-black w-12 h-12 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.4)] shrink-0">
+                        <Coins className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-white uppercase tracking-wider leading-none mb-0.5">Wallet</h3>
+                        <p className="text-yellow-300/60 font-bold text-[10px] uppercase tracking-wider">
+                          <span className="text-yellow-300 text-base font-black">{walletBeats.toLocaleString()}</span> Beats
                         </p>
                       </div>
                     </motion.div>
                    </div>
 
-                   {/* ROW 3: CHARACTER EDITOR */}
-                   <div className="mt-2">
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('locker')}
-                      className="bg-gradient-to-br from-purple-950/50 to-pink-950/30 backdrop-blur-xl border border-yellow-500/30 hover:border-yellow-400 rounded-[40px] p-8 cursor-pointer shadow-xl hover:shadow-[0_0_30px_rgba(250,204,21,0.3)] transition-all group relative overflow-hidden flex items-center">
-                      <div className="absolute right-0 top-0 w-40 h-40 bg-yellow-500/10 rounded-full blur-2xl group-hover:bg-yellow-500/20 transition-all" />
-                      <div className="bg-gradient-to-br from-yellow-400 to-amber-500 text-black w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.4)] shrink-0 mr-6">
-                        <Shirt className="w-6 h-6" fill="currentColor" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-widest leading-none mb-1">Character Editor</h3>
-                        <p className="text-yellow-400/60 font-bold text-xs uppercase tracking-wider">KOERPER, KLEIDUNG, ACCESSOIRES & MEHR</p>
-                      </div>
-                    </motion.div>
-                   </div>
-
-                   {/* ROW 4: SOCIAL */}
-                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('friends')}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-cyan-500/20 hover:border-cyan-400/50 rounded-3xl p-5 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center">
-                      <div className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white w-11 h-11 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] mb-3">
-                        <Heart className="w-5 h-5" />
-                      </div>
-                      <h3 className="text-sm font-black text-white uppercase tracking-widest leading-tight">Freunde</h3>
-                    </motion.div>
-
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('profile')}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-purple-500/20 hover:border-purple-400/50 rounded-3xl p-5 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center">
-                      <div className="bg-gradient-to-br from-purple-500 to-pink-600 text-white w-11 h-11 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.3)] mb-3">
-                        <UserCircle className="w-5 h-5" />
-                      </div>
-                      <h3 className="text-sm font-black text-white uppercase tracking-widest leading-tight">Profil</h3>
-                    </motion.div>
-
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('leaderboard')}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-yellow-500/20 hover:border-yellow-400/50 rounded-3xl p-5 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center">
-                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 text-black w-11 h-11 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.3)] mb-3">
-                        <Trophy className="w-5 h-5" />
-                      </div>
-                      <h3 className="text-sm font-black text-white uppercase tracking-widest leading-tight">Rangliste</h3>
-                    </motion.div>
-
-                    <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setShowDailyReward(true)}
-                      className="bg-purple-950/50 backdrop-blur-xl border border-green-500/20 hover:border-green-400/50 rounded-3xl p-5 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center relative">
-                      <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white w-11 h-11 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(34,197,94,0.3)] mb-3">
-                        <Gift className="w-5 h-5" />
-                      </div>
-                      <h3 className="text-sm font-black text-white uppercase tracking-widest leading-tight">Daily</h3>
-                    </motion.div>
-
-                    {isAdmin(userRole) && (
-                      <motion.div whileHover={{ y: -5, scale: 1.02 }} whileTap={{ scale: 0.95 }} onClick={() => setView('admin')}
-                        className="bg-purple-950/50 backdrop-blur-xl border border-red-500/30 hover:border-red-400/50 rounded-3xl p-5 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center">
-                        <div className="bg-gradient-to-br from-red-500 to-orange-600 text-white w-11 h-11 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.4)] mb-3">
-                          <ShieldAlert className="w-5 h-5" />
+                   {/* ═══ ROW 3: SOCIAL BUTTONS ═══ */}
+                   <div className="grid grid-cols-5 gap-3">
+                    {[
+                      { label: 'Freunde', icon: Heart, color: 'from-cyan-500 to-blue-600', border: 'border-cyan-500/20 hover:border-cyan-400/50', shadow: 'rgba(6,182,212,0.3)', action: () => setView('friends') },
+                      { label: 'Profil', icon: UserCircle, color: 'from-purple-500 to-pink-600', border: 'border-purple-500/20 hover:border-purple-400/50', shadow: 'rgba(168,85,247,0.3)', action: () => setView('profile') },
+                      { label: 'Rangliste', icon: Trophy, color: 'from-yellow-500 to-amber-600 text-black', border: 'border-yellow-500/20 hover:border-yellow-400/50', shadow: 'rgba(250,204,21,0.3)', action: () => setView('leaderboard') },
+                      { label: 'Daily', icon: Gift, color: 'from-green-500 to-emerald-600', border: 'border-green-500/20 hover:border-green-400/50', shadow: 'rgba(34,197,94,0.3)', action: () => setShowDailyReward(true) },
+                      ...(isAdmin(userRole) ? [{ label: 'Admin', icon: ShieldAlert, color: 'from-red-500 to-orange-600', border: 'border-red-500/30 hover:border-red-400/50', shadow: 'rgba(239,68,68,0.4)', action: () => setView('admin') }] : []),
+                    ].map(item => (
+                      <motion.div key={item.label} whileHover={{ y: -3, scale: 1.03 }} whileTap={{ scale: 0.96 }} onClick={item.action}
+                        className={`panel-audition ${item.border} p-4 cursor-pointer shadow-xl transition-all group flex flex-col items-center text-center`}>
+                        <div className={`bg-gradient-to-br ${item.color} text-white w-10 h-10 rounded-full flex items-center justify-center shadow-[0_0_12px_${item.shadow}] mb-2`}>
+                          <item.icon className="w-4 h-4" />
                         </div>
-                        <h3 className="text-sm font-black text-white uppercase tracking-widest leading-tight">Admin</h3>
+                        <h3 className="text-[11px] font-black text-white uppercase tracking-widest leading-tight">{item.label}</h3>
                       </motion.div>
-                    )}
+                    ))}
                    </div>
                 </div>
 
-                {/* News Ticker */}
-                <div className="w-full max-w-5xl mt-12 overflow-hidden rounded-full bg-purple-950/50 border border-purple-500/20 py-2">
-                  <div className="animate-ticker whitespace-nowrap text-sm font-bold text-purple-300/60 tracking-wider">
-                    🎵 Willkommen bei Audition Online! — Server: EU-West — Neue Items im Fashion Shop verfügbar! — Tanze zum Beat und werde der beste Tänzer! 🎵
+                {/* News Ticker — Audition style bottom bar */}
+                <div className="w-full max-w-6xl mt-8 overflow-hidden rounded-2xl panel-audition py-2.5 px-4 border-pink-500/10">
+                  <div className="animate-ticker whitespace-nowrap text-sm font-bold tracking-wider">
+                    <span className="text-pink-400">★</span>
+                    <span className="text-purple-300/70 mx-2">Willkommen bei Audition Online!</span>
+                    <span className="text-pink-400">★</span>
+                    <span className="text-cyan-300/60 mx-2">Server: EU-West</span>
+                    <span className="text-pink-400">★</span>
+                    <span className="text-yellow-300/60 mx-2">Neue Items im Fashion Shop!</span>
+                    <span className="text-pink-400">★</span>
+                    <span className="text-green-300/60 mx-2">Daily Rewards nicht vergessen!</span>
+                    <span className="text-pink-400">★</span>
+                    <span className="text-purple-300/70 mx-2">Tanze zum Beat und werde der beste Tänzer!</span>
+                    <span className="text-pink-400">★</span>
                   </div>
                 </div>
               </motion.div>
@@ -689,7 +733,15 @@ export default function App() {
 
             {view === 'friends' && (
               <motion.div key="friends" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50">
-                <FriendsList userId={session?.user?.id || getDeviceId()} username={username} onBack={() => setView('menu')} />
+                {session?.user ? (
+                  <FriendsList userId={session.user.id} username={username} onBack={() => setView('menu')} />
+                ) : (
+                  <div className="min-h-screen bg-[#1a0a2e] flex flex-col items-center justify-center gap-4 text-white">
+                    <p className="text-gray-400 text-sm uppercase tracking-widest font-bold">Account erforderlich</p>
+                    <p className="text-gray-500 text-xs">Freundesliste ist nur mit einem Account verfuegbar.</p>
+                    <button onClick={() => setView('menu')} className="px-6 py-3 bg-pink-600 hover:bg-pink-500 rounded-full font-black uppercase tracking-widest text-xs">Zurueck</button>
+                  </div>
+                )}
               </motion.div>
             )}
 

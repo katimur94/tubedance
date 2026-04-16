@@ -486,6 +486,144 @@ const TEXTURES: Record<string, TexFn> = {
     }
     fabricGrain(ctx, 0.015);
   },
+
+  // ═══ NEW ITEMS — hand-crafted textures ═══
+
+  // Bomber Navy
+  'bomber_navy': (ctx) => {
+    gradientBG(ctx, '#1e3a5f', '#0f1d3a', 90);
+    // Nylon sheen stripes
+    for (let i = 0; i < S; i += 8) {
+      ctx.strokeStyle = `rgba(80,120,200,${0.04 + Math.sin(i * 0.1) * 0.02})`;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(S, i); ctx.stroke();
+    }
+    // Ribbed collar/cuffs zone
+    ctx.fillStyle = 'rgba(50,70,100,0.3)';
+    ctx.fillRect(0, 0, S, 40); ctx.fillRect(0, S - 40, S, 40);
+    weave(ctx, 'rgba(255,255,255,0.02)', 3);
+    stitchLine(ctx, S * 0.5, 0, S * 0.5, S);
+    fabricGrain(ctx, 0.02);
+  },
+
+  // Varsity
+  'varsity_green': (ctx) => {
+    gradientBG(ctx, '#166534', '#14532d', 0);
+    // Sleeve contrast (lighter sides)
+    ctx.fillStyle = 'rgba(200,200,200,0.08)';
+    ctx.fillRect(0, 0, S * 0.25, S); ctx.fillRect(S * 0.75, 0, S * 0.25, S);
+    // Letter patch area
+    const g = ctx.createRadialGradient(S / 2, S * 0.35, 10, S / 2, S * 0.35, 80);
+    g.addColorStop(0, 'rgba(255,220,100,0.15)'); g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+    stitchLine(ctx, S * 0.25, 0, S * 0.25, S);
+    stitchLine(ctx, S * 0.75, 0, S * 0.75, S);
+    fabricGrain(ctx, 0.03);
+  },
+
+  // Kimono
+  'kimono': (ctx) => {
+    gradientBG(ctx, '#9f1239', '#7f1d1d', 135);
+    // Japanese wave pattern
+    for (let y = 0; y < S; y += 30) {
+      for (let x = 0; x < S; x += 40) {
+        ctx.strokeStyle = 'rgba(255,200,100,0.08)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(x + 20, y, 15, 0, Math.PI);
+        ctx.stroke();
+      }
+    }
+    // Obi belt band
+    ctx.fillStyle = 'rgba(200,150,50,0.15)';
+    ctx.fillRect(0, S * 0.55, S, S * 0.12);
+    fabricGrain(ctx, 0.02);
+  },
+
+  // Hawaiian shirt
+  'hawaiian': (ctx) => {
+    gradientBG(ctx, '#fbbf24', '#22c55e', 45);
+    // Flower pattern
+    for (let i = 0; i < 30; i++) {
+      const x = Math.random() * S, y = Math.random() * S;
+      ctx.fillStyle = `rgba(${200 + Math.random() * 55},${Math.random() * 100 + 50},${Math.random() * 100 + 80},0.2)`;
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(x + Math.cos(a) * 10, y + Math.sin(a) * 10, 8, 5, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    fabricGrain(ctx, 0.015);
+  },
+
+  // Chinos beige
+  'chinos_beige': (ctx) => {
+    gradientBG(ctx, '#d4a574', '#c2956a', 0);
+    weave(ctx, 'rgba(150,120,80,0.06)', 3);
+    noise(ctx, 'rgba(0,0,0,0.03)', 5000);
+    // Crease lines
+    stitchLine(ctx, S * 0.3, 0, S * 0.3, S, 'rgba(0,0,0,0.06)');
+    stitchLine(ctx, S * 0.7, 0, S * 0.7, S, 'rgba(0,0,0,0.06)');
+    fabricGrain(ctx, 0.02);
+  },
+
+  // Leather pants
+  'leather_pants': (ctx) => {
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, S, S);
+    // Leather grain (like jacket)
+    noise(ctx, 'rgba(60,60,60,0.2)', 2500, 2, 2);
+    // Gloss highlight
+    const g = ctx.createLinearGradient(0, 0, S, S);
+    g.addColorStop(0, 'rgba(255,255,255,0.08)'); g.addColorStop(0.5, 'transparent'); g.addColorStop(1, 'rgba(255,255,255,0.05)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+    stitchLine(ctx, S * 0.5, 0, S * 0.5, S, 'rgba(255,255,255,0.08)');
+    fabricGrain(ctx, 0.015);
+  },
+
+  // Combat boots
+  'shoes_combat': (ctx) => {
+    ctx.fillStyle = '#1f1f1f'; ctx.fillRect(0, 0, S, S);
+    noise(ctx, 'rgba(80,80,80,0.15)', 3000, 2, 2);
+    // Boot sole tread pattern
+    for (let y = S * 0.7; y < S; y += 8) {
+      ctx.strokeStyle = 'rgba(40,40,40,0.5)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S, y); ctx.stroke();
+    }
+    // Lace holes
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = 'rgba(100,100,100,0.3)';
+      ctx.beginPath(); ctx.arc(S * 0.45, S * 0.1 + i * 30, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(S * 0.55, S * 0.1 + i * 30, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    fabricGrain(ctx, 0.02);
+  },
+
+  // Bucket hat
+  'hat_bucket': (ctx) => {
+    gradientBG(ctx, '#65a30d', '#4d7c0f', 0);
+    weave(ctx, 'rgba(0,0,0,0.04)', 4);
+    // Brim shade
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(0, S * 0.7, S, S * 0.3);
+    fabricGrain(ctx, 0.025);
+  },
+
+  // Witch hat
+  'hat_witch': (ctx) => {
+    gradientBG(ctx, '#2e1065', '#1e0040', 90);
+    // Star pattern
+    for (let i = 0; i < 15; i++) {
+      ctx.fillStyle = `rgba(200,180,255,${0.05 + Math.random() * 0.1})`;
+      const x = Math.random() * S, y = Math.random() * S;
+      ctx.beginPath(); ctx.arc(x, y, 2 + Math.random() * 3, 0, Math.PI * 2); ctx.fill();
+    }
+    // Band
+    ctx.fillStyle = 'rgba(150,100,200,0.2)';
+    ctx.fillRect(0, S * 0.6, S, S * 0.08);
+    fabricGrain(ctx, 0.02);
+  },
 };
 
 // ─── Factory + Cache ────────────────────────────────────────────────

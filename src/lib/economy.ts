@@ -219,10 +219,12 @@ export function purchaseItem(itemId: string): { success: boolean; error?: string
 
   // Admins get everything for free
   if (!isAdminEconomy()) {
+    // Re-read wallet fresh from localStorage to prevent multi-tab stale reads
     const wallet = getLocalWallet();
     const finalPrice = item.isSale && item.salePercent ? Math.floor(item.price * (1 - item.salePercent / 100)) : item.price;
 
     if (wallet.beats < finalPrice) return { success: false, error: 'Nicht genug Beats' };
+    if (wallet.beats - finalPrice < 0) return { success: false, error: 'Nicht genug Beats' }; // Extra guard
 
     wallet.beats -= finalPrice;
     wallet.totalSpent += finalPrice;

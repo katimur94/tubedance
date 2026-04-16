@@ -7,8 +7,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Sparkles, Music } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Sparkles, Music, TrendingUp } from 'lucide-react';
 import { type HitRating, HIT_POINTS } from '../../types/gameTypes';
+import { SoundEngine } from '../../utils/audio';
+
+const soundEngine = new SoundEngine();
 
 interface FreestyleModeProps {
   bpm: number;
@@ -35,11 +38,14 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
   const [beatPulse, setBeatPulse] = useState(false);
   const [juryScore, setJuryScore] = useState(0);
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
+  const [juryTierAnnounce, setJuryTierAnnounce] = useState<string | null>(null);
   const feedbackIdRef = useRef(0);
   const feedbackTimerRef = useRef<any>(null);
+  const juryTierTimer = useRef<any>(null);
   const startTimeRef = useRef(performance.now());
   const lastDirectionRef = useRef(-1);
   const repeatCountRef = useRef(0);
+  const lastJuryTier = useRef('');
 
   const beatInterval = (60 / bpm) * 1000; // ms per beat
 
@@ -109,14 +115,37 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
       const basePoints = HIT_POINTS[rating];
       const finalPoints = Math.floor(basePoints * varietyMultiplier * (1 + complexityBonus));
 
+      // Sound feedback
+      soundEngine.init();
       if (rating === 'Miss') {
+        soundEngine.playMiss();
         onMiss();
         setUniqueDirections(new Set());
         setJuryScore(s => Math.max(0, s - 5));
       } else {
+        const soundMap: Record<string, 'perfect' | 'great' | 'cool' | 'bad'> = { Perfect: 'perfect', Great: 'great', Cool: 'cool', Bad: 'bad' };
+        soundEngine.playHit(soundMap[rating] || 'cool');
         onHit(rating, finalPoints);
         setCurrentComboLength(c => c + 1);
-        setJuryScore(s => Math.min(100, s + finalPoints * 0.05));
+        setJuryScore(s => {
+          const newScore = Math.min(100, s + finalPoints * 0.05);
+          // Jury tier announcement
+          const tiers = [
+            { min: 80, label: 'FANTASTISCH!' },
+            { min: 60, label: 'SUPER!' },
+            { min: 40, label: 'GUT!' },
+            { min: 20, label: 'WEITER SO!' },
+          ];
+          const tier = tiers.find(t => newScore >= t.min);
+          if (tier && tier.label !== lastJuryTier.current) {
+            lastJuryTier.current = tier.label;
+            clearTimeout(juryTierTimer.current);
+            setJuryTierAnnounce(tier.label);
+            if (newScore >= 60) soundEngine.playCombo();
+            juryTierTimer.current = setTimeout(() => setJuryTierAnnounce(null), 2000);
+          }
+          return newScore;
+        });
       }
 
       // Entry for visual trail
@@ -244,6 +273,27 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
         )}
       </AnimatePresence>
 
+      {/* Jury Tier Announcement */}
+      <AnimatePresence>
+        {juryTierAnnounce && (
+          <motion.div
+            key={juryTierAnnounce}
+            initial={{ scale: 0.5, opacity: 0, y: 10 }}
+            animate={{ scale: 1.3, opacity: 1, y: 0 }}
+            exit={{ scale: 0.8, opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 250, damping: 15 }}
+            className={`text-3xl font-black uppercase tracking-widest ${
+              juryTierAnnounce === 'FANTASTISCH!' ? 'text-yellow-400 drop-shadow-[0_0_25px_rgba(250,204,21,0.8)]'
+              : juryTierAnnounce === 'SUPER!' ? 'text-green-400 drop-shadow-[0_0_20px_rgba(74,222,128,0.8)]'
+              : juryTierAnnounce === 'GUT!' ? 'text-cyan-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]'
+              : 'text-purple-400'
+            }`}
+          >
+            {juryTierAnnounce}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Jury Score Bar */}
       <div className="w-full max-w-md">
         <div className="flex items-center justify-between mb-2">
@@ -262,9 +312,23 @@ export function FreestyleMode({ bpm, onHit, onMiss, isPlaying }: FreestyleModePr
         </div>
       </div>
 
+      {/* Variation Meter */}
+      <div className="flex items-center gap-3">
+        <TrendingUp size={14} className="text-cyan-500" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Variation</span>
+        <div className="flex gap-1">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className={`w-6 h-2 rounded-full transition-all ${
+              uniqueDirections.has(i) ? 'bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.5)]' : 'bg-gray-700'
+            }`} />
+          ))}
+        </div>
+        <span className="text-[10px] font-mono text-gray-500">{uniqueDirections.size}/4</span>
+      </div>
+
       {/* Instructions */}
       <p className="text-gray-600 text-xs uppercase tracking-widest font-bold">
-        Drücke Pfeiltasten zum Beat — variiere für mehr Punkte!
+        Druecke Pfeiltasten zum Beat — variiere fuer mehr Punkte!
       </p>
     </div>
   );

@@ -102,7 +102,10 @@ export function FashionShop({ playerLevel, profile, onBack }: FashionShopProps) 
     return items;
   }, [category, sortMode, rarityFilter]);
 
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const handlePurchase = (item: ShopItem) => {
+    if (isPurchasing) return; // Prevent double-click race condition
+    setIsPurchasing(true);
     const result = purchaseItem(item.id);
     if (result.success) {
       setWallet(getLocalWallet());
@@ -112,6 +115,7 @@ export function FashionShop({ playerLevel, profile, onBack }: FashionShopProps) 
       setPurchaseResult({ success: false, message: result.error || 'Fehler beim Kauf' });
     }
     setShowConfirm(false);
+    setIsPurchasing(false);
     setTimeout(() => setPurchaseResult(null), 3000);
   };
 

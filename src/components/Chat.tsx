@@ -66,7 +66,7 @@ export function Chat({ channelName, userId, username, userRole = 'user', minimiz
     channelRef.current = channel;
 
     return () => {
-      channel.unsubscribe().then(() => supabase.removeChannel(channel));
+      channel.unsubscribe().then(() => supabase.removeChannel(channel)).catch(() => supabase.removeChannel(channel));
     };
   }, [channelName]);
 

@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.5.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@readyplayerme/react-avatar-creator": "^0.5.0",

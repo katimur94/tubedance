@@ -14,11 +14,11 @@ export const GAME_MODES: GameModeConfig[] = [
   {
     id: 'beat_up',
     name: 'Beat Up',
-    description: 'Pfeiltasten im Takt drücken. Klassischer Audition-Modus.',
+    description: 'Klassischer Audition-Modus: Pfeile eingeben, Spacebar im Takt. Level 1-9!',
     icon: 'Zap',
     color: 'from-cyan-500 to-blue-600',
     minPlayers: 1,
-    maxPlayers: 8,
+    maxPlayers: 6,
   },
   {
     id: 'beat_rush',
@@ -27,16 +27,16 @@ export const GAME_MODES: GameModeConfig[] = [
     icon: 'ArrowDown',
     color: 'from-pink-500 to-purple-600',
     minPlayers: 1,
-    maxPlayers: 8,
+    maxPlayers: 6,
   },
   {
     id: 'freestyle',
     name: 'Freestyle',
-    description: 'Erfinde eigene Pfeil-Kombos für Extrapunkte.',
+    description: 'Erfinde eigene Pfeil-Kombos für Extrapunkte. Jury bewertet!',
     icon: 'Sparkles',
     color: 'from-yellow-400 to-orange-500',
     minPlayers: 1,
-    maxPlayers: 8,
+    maxPlayers: 6,
   },
   {
     id: 'club_dance',
@@ -45,7 +45,7 @@ export const GAME_MODES: GameModeConfig[] = [
     icon: 'Users',
     color: 'from-green-400 to-emerald-600',
     minPlayers: 2,
-    maxPlayers: 8,
+    maxPlayers: 6,
   },
 ];
 
@@ -70,10 +70,36 @@ export const GRADE_COLORS: Record<LetterGrade, string> = {
   F: 'text-red-500',
 };
 
+// Original Audition scoring: Level × 100, modified by hit quality
+// BeatUpMode uses this directly (level * 100 * modifier)
+// Other modes keep flat points for simplicity
 export const HIT_POINTS: Record<HitRating, number> = {
-  Perfect: 100,
-  Great: 80,
-  Cool: 50,
-  Bad: 20,
+  Perfect: 150, // Level×100×1.5 equivalent base for non-level modes
+  Great: 100,   // Level×100×1.0
+  Cool: 50,     // Level×100×0.5
+  Bad: 25,      // Level×100×0.25
   Miss: 0,
 };
+
+// Score modifiers for level-based calculation
+export const SCORE_MODIFIERS: Record<HitRating, number> = {
+  Perfect: 1.5,
+  Great: 1.0,
+  Cool: 0.5,
+  Bad: 0.25,
+  Miss: 0,
+};
+
+// EXP & DEN (original currency names)
+export interface GameRewards {
+  exp: number;
+  den: number; // "Beats" in current system, originally "DEN"
+}
+
+// Calculate rewards based on placement (1st-6th) — original Audition style
+export function calculatePlacementRewards(placement: number, score: number, maxCombo: number): GameRewards {
+  const placementMultiplier = [2.0, 1.5, 1.2, 1.0, 0.8, 0.6][Math.min(placement - 1, 5)];
+  const baseExp = Math.floor(score * 0.05 * placementMultiplier);
+  const baseDen = Math.floor(score * 0.1 * placementMultiplier) + Math.floor(maxCombo * 2);
+  return { exp: baseExp, den: baseDen };
+}

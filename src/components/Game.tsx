@@ -1,15 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import YouTube from 'react-youtube';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Trophy, SkipForward, XCircle, Coins, Flame } from 'lucide-react';
+import { ArrowLeft, Trophy, SkipForward, XCircle, Coins, Flame, Zap, Wifi, WifiOff } from 'lucide-react';
 import { calculateBeatsEarned } from '../lib/economy';
 import { supabase } from '../lib/supabase';
 import { AnimatedAvatar } from './AnimatedAvatar';
 import { BeatUpMode } from './modes/BeatUpMode';
 import { BeatRushMode } from './modes/BeatRushMode';
 import { FreestyleMode } from './modes/FreestyleMode';
+import { HitVFX } from './HitVFX';
+import { StageBackground } from './StageBackground';
 import { PlayerProfile } from './LockerRoom';
 import { type GameMode, type HitRating, type LetterGrade, getLetterGrade, GRADE_COLORS } from '../types/gameTypes';
+import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+
+// Error boundary specifically for game mode components — falls back gracefully
+class GameModeBoundary extends Component<{ children: ReactNode; onError?: () => void }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[GameMode Error]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center gap-4 p-8 text-center">
+          <p className="text-red-400 font-black uppercase tracking-widest text-sm">Spielmodus-Fehler</p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); this.props.onError?.(); }}
+            className="px-6 py-3 bg-pink-600 hover:bg-pink-500 rounded-full font-black uppercase tracking-widest text-xs text-white"
+          >
+            Neu starten
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface PlaylistSong { video_id: string; title: string; bpm: number }
 interface GameProps {
@@ -106,6 +134,7 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
   const [hitCounts, setHitCounts] = useState<Record<HitRating, number>>(savedScore?.hitCounts || { Perfect: 0, Great: 0, Cool: 0, Bad: 0, Miss: 0 });
   const [currentGrade, setCurrentGrade] = useState<LetterGrade>('C');
   const [lastRating, setLastRating] = useState<HitRating | null>(null);
+  const [vfxKey, setVfxKey] = useState(0);
   const lastRatingTimer = useRef<any>(null);
 
   const playerRef = useRef<any>(null);
@@ -199,7 +228,8 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
     }
   }, [mode, roomCode, userId, username]);
 
-  // Broadcast score/dance updates (debounced)
+  // Broadcast score/dance updates (debounced) — only sort on actual score change
+  const lastBroadcastScore = useRef(0);
   useEffect(() => {
     if (channelRef.current && userId && username) {
       clearTimeout(scoreBroadcastTimer.current);
@@ -208,7 +238,28 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
           type: 'broadcast', event: 'score_update',
           payload: { userId, username, score, combo, profile, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() }
         });
-        setLeaderboard(prev => prev.map(p => p.userId === userId ? { ...p, score, combo, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() } : p).sort((a, b) => b.score - a.score));
+        const scoreChanged = score !== lastBroadcastScore.current;
+        lastBroadcastScore.current = score;
+        setLeaderboard(prev => {
+          const updated = prev.map(p => p.userId === userId ? { ...p, score, combo, danceState: avatarDance, intensity, lastRating, lastRatingTime: Date.now() } : p);
+          // Only sort if score actually changed (avoid 360 sorts/sec)
+          if (scoreChanged) {
+            const sorted = [...updated].sort((a, b) => b.score - a.score);
+            // Check if someone passed us
+            const myRank = sorted.findIndex(p => p.userId === userId);
+            if (prevLeaderboardRank.current > 0 && myRank > prevLeaderboardRank.current && sorted.length > 1) {
+              const passer = sorted[prevLeaderboardRank.current - 1];
+              if (passer && passer.userId !== userId) {
+                clearTimeout(leaderboardNotifTimer.current);
+                setLeaderboardNotif(`${passer.username} hat dich ueberholt!`);
+                leaderboardNotifTimer.current = setTimeout(() => setLeaderboardNotif(null), 3000);
+              }
+            }
+            prevLeaderboardRank.current = myRank;
+            return sorted;
+          }
+          return updated;
+        });
       }, 100);
     }
     return () => clearTimeout(scoreBroadcastTimer.current);
@@ -323,37 +374,90 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
     }
   };
 
-  const handleHit = (rating: HitRating, points: number) => {
+  // ── Fever Mode + Combo Milestones ──
+  const [feverMode, setFeverMode] = useState(false);
+  const [comboMilestone, setComboMilestone] = useState<number | null>(null);
+  const [missGrace, setMissGrace] = useState(0); // Grace hits remaining before combo breaks
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [leaderboardNotif, setLeaderboardNotif] = useState<string | null>(null);
+  const comboMilestoneTimer = useRef<any>(null);
+  const leaderboardNotifTimer = useRef<any>(null);
+  const prevLeaderboardRank = useRef(0);
+
+  // Offline detection
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  const handleHit = useCallback((rating: HitRating, points: number) => {
     setHitCounts(prev => ({ ...prev, [rating]: prev[rating] + 1 }));
     setLastRating(rating);
+    setVfxKey(k => k + 1);
     clearTimeout(lastRatingTimer.current);
     lastRatingTimer.current = setTimeout(() => setLastRating(null), 1200);
 
+    // Reset miss grace on hit
+    setMissGrace(0);
+
     setCombo(prev => {
       const newCombo = prev + 1;
-      const newMultiplier = Math.floor(newCombo / 10) + 1;
+
+      // Fever Mode: 20+ combo = 4× multiplier, else normal
+      const isFever = newCombo >= 20;
+      const newMultiplier = isFever ? 4 : Math.floor(newCombo / 10) + 1;
       setMultiplier(newMultiplier);
+      setFeverMode(isFever);
       setMaxCombo(mc => Math.max(mc, newCombo));
+
+      // Intensity: ramps up faster with combo
       const newIntensity = Math.min(3, 1 + newCombo * 0.1);
       setIntensity(newIntensity);
       setAvatarDance('dancing');
-      setScore(s => s + (points * newMultiplier));
+
+      // Consistency bonus: streak of Perfect/Great gives +10% per streak
+      const streakBonus = rating === 'Perfect' ? 1.15 : rating === 'Great' ? 1.05 : 1;
+      setScore(s => s + Math.floor(points * newMultiplier * streakBonus));
+
+      // Combo milestones: 10, 25, 50, 100
+      if ([10, 25, 50, 100].includes(newCombo)) {
+        clearTimeout(comboMilestoneTimer.current);
+        setComboMilestone(newCombo);
+        comboMilestoneTimer.current = setTimeout(() => setComboMilestone(null), 2000);
+      }
+
       return newCombo;
     });
 
     setRound(r => r + 1);
-  };
+  }, []);
 
-  const handleMiss = () => {
+  const handleMiss = useCallback(() => {
     setHitCounts(prev => ({ ...prev, Miss: prev.Miss + 1 }));
     setLastRating('Miss');
+    setVfxKey(k => k + 1);
     clearTimeout(lastRatingTimer.current);
     lastRatingTimer.current = setTimeout(() => setLastRating(null), 1200);
     setAvatarDance('miss');
-    setCombo(0);
-    setMultiplier(1);
-    setIntensity(1);
-  };
+
+    // Grace period: first miss after combo >= 5 doesn't break combo
+    setMissGrace(prev => {
+      if (prev === 0 && combo >= 5) {
+        // Grace: don't break combo yet, just reduce multiplier
+        setMultiplier(m => Math.max(1, m - 1));
+        return 1; // Used grace
+      }
+      // No grace or already used: full reset
+      setCombo(0);
+      setMultiplier(1);
+      setIntensity(1);
+      setFeverMode(false);
+      return 0;
+    });
+  }, [combo]);
 
   const currentLevelProgress = Math.floor(score / 10);
   const beatsPreview = calculateBeatsEarned(score, maxCombo, multiplier, currentSongIndex + 1);
@@ -396,11 +500,18 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
   };
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden flex flex-col font-sans">
+    <div className="relative w-full h-screen bg-[#0a0515] overflow-hidden flex flex-col font-sans">
 
-      {/* YouTube Background */}
+      {/* Disco Stage Background */}
+      <StageBackground
+        bpm={currentSong?.bpm || 120}
+        intensity={intensity}
+        isPlaying={gamePhase === 'playing'}
+      />
+
+      {/* YouTube Background (blended with stage) */}
       {currentSong ? (
-        <div className={`absolute inset-0 z-0 opacity-50 pointer-events-none flex items-center justify-center overflow-hidden transition-all duration-1000 ${gamePhase !== 'playing' ? 'blur-3xl opacity-10' : ''}`}>
+        <div className={`absolute inset-0 z-[1] pointer-events-none flex items-center justify-center overflow-hidden transition-all duration-1000 ${gamePhase === 'playing' ? 'opacity-20 mix-blend-screen' : 'opacity-5 blur-3xl'}`}>
           <YouTube
             videoId={currentSong.video_id}
             opts={{ width: '100%', height: '100%', playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, showinfo: 0, start: 10 } }}
@@ -450,6 +561,13 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
         <div className="absolute inset-0 z-0 flex items-center justify-center text-gray-600">Keine Playlist gefunden.</div>
       )}
 
+      {/* VFX Layer (above stage, below UI) */}
+      {gamePhase === 'playing' && (
+        <div className="absolute inset-0 z-[5] pointer-events-none">
+          <HitVFX lastRating={lastRating} combo={combo} triggerKey={vfxKey} />
+        </div>
+      )}
+
       {/* Header Info */}
       <div className="absolute top-0 left-0 w-full p-6 z-20 flex justify-between items-start pointer-events-none">
         <div className="flex flex-col gap-3 pointer-events-auto">
@@ -467,36 +585,89 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
           </div>
         </div>
 
-        <div className="text-right flex flex-col items-end gap-2">
-          <div className="bg-gray-900/80 px-8 py-5 rounded-3xl border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.8)] backdrop-blur-md pointer-events-auto">
-            <p className="text-sm text-cyan-400 font-extrabold uppercase tracking-[0.2em] mb-1">SCORE</p>
-            <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-white drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]">{score.toString().padStart(6, '0')}</h2>
+        <div className="text-right flex flex-col items-end gap-2 pointer-events-auto">
+          {/* Score Panel — Audition style with glow */}
+          <div className="panel-audition px-6 py-4 border-pink-500/20 shadow-[0_0_30px_rgba(236,72,153,0.15)]">
+            <p className="text-[10px] text-pink-400 font-black uppercase tracking-[0.3em] mb-1">SCORE</p>
+            <h2 className="text-5xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] font-mono">{score.toString().padStart(7, '0')}</h2>
           </div>
 
-          {/* Live Grade */}
-          <div className="pointer-events-auto">
-            <span className={`text-5xl font-black ${GRADE_COLORS[currentGrade]}`}>
-              {currentGrade}
-            </span>
-          </div>
+          {/* Live Grade — BIG */}
+          <motion.div
+            key={currentGrade}
+            initial={{ scale: 1.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={`text-6xl font-black ${GRADE_COLORS[currentGrade]}`}
+          >
+            {currentGrade}
+          </motion.div>
 
+          {/* Combo Counter + Fever Mode */}
           <AnimatePresence>
             {combo > 2 && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.5, x: 50 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.8 }}
-                className={`py-3 px-6 rounded-2xl flex items-center gap-3 border shadow-2xl pointer-events-auto ${multiplier > 1 ? 'bg-gradient-to-r from-pink-600 to-purple-600 border-pink-400' : 'bg-gray-900/80 border-cyan-500'}`}
+                className={`py-2.5 px-5 rounded-2xl flex items-center gap-3 border-2 shadow-2xl ${
+                  feverMode ? 'bg-gradient-to-r from-yellow-900/90 to-red-900/90 border-yellow-400 shadow-[0_0_35px_rgba(250,204,21,0.5)] animate-pulse'
+                  : combo >= 30 ? 'bg-gradient-to-r from-yellow-900/80 to-orange-900/80 border-yellow-400 shadow-[0_0_25px_rgba(250,204,21,0.3)]'
+                  : combo >= 15 ? 'bg-gradient-to-r from-pink-900/80 to-purple-900/80 border-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.3)]'
+                  : multiplier > 1 ? 'bg-gradient-to-r from-pink-600/60 to-purple-600/60 border-pink-400'
+                  : 'bg-purple-950/80 border-cyan-500/50'
+                }`}
               >
-                {combo >= 10 && <Flame size={18} className="text-orange-400 animate-pulse" />}
-                <span className="text-xs text-white uppercase tracking-widest font-black">COMBO</span>
-                <span className="text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]">{combo}</span>
+                {feverMode && <Zap size={22} className="text-yellow-300 animate-bounce" />}
+                {!feverMode && combo >= 10 && <Flame size={20} className={combo >= 30 ? 'text-yellow-400 animate-pulse' : 'text-orange-400 animate-pulse'} />}
+                <span className="text-[10px] text-white uppercase tracking-widest font-black">
+                  {feverMode ? 'FEVER' : 'COMBO'}
+                </span>
+                <span className="text-4xl font-black text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.6)]">{combo}</span>
                 {multiplier > 1 && (
-                  <span className="ml-2 px-2 py-1 bg-white text-pink-600 text-xs font-black uppercase tracking-widest rounded shadow-inner">
-                    x{multiplier} MULTI
+                  <span className={`ml-1 px-2 py-0.5 text-xs font-black uppercase tracking-widest rounded-lg shadow-inner ${
+                    feverMode ? 'bg-yellow-400 text-black' : 'bg-white/90 text-pink-600'
+                  }`}>
+                    x{multiplier}
                   </span>
                 )}
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Combo Milestone Animation */}
+          <AnimatePresence>
+            {comboMilestone && (
+              <motion.div
+                key={comboMilestone}
+                initial={{ scale: 0, opacity: 0, y: 20 }}
+                animate={{ scale: 1.3, opacity: 1, y: 0 }}
+                exit={{ scale: 0.5, opacity: 0, y: -30 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-full text-black font-black text-lg uppercase tracking-widest shadow-[0_0_40px_rgba(250,204,21,0.6)]"
+              >
+                {comboMilestone}x COMBO!
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Multiplayer Leaderboard Notification */}
+          <AnimatePresence>
+            {leaderboardNotif && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 50 }}
+                className="px-4 py-2 bg-red-900/80 border border-red-500/50 rounded-xl text-red-200 text-xs font-black uppercase tracking-widest"
+              >
+                {leaderboardNotif}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Offline indicator */}
+          {!isOnline && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-red-900/60 border border-red-500/40 rounded-full text-red-300 text-[10px] font-bold uppercase tracking-widest">
+              <WifiOff size={12} /> Offline
+            </div>
+          )}
 
           {nextSong && (
             <div className="bg-gray-900/80 py-2 px-6 rounded-full flex items-center gap-2 border border-gray-700 shadow-lg mt-2 pointer-events-auto">
@@ -512,7 +683,7 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-end pb-24 pointer-events-none">
 
           {/* Multi-Player Battle Stage */}
-          <div className="mb-4 pointer-events-auto relative w-full flex justify-center items-end px-4" style={{ height: mode === 'audition' && leaderboard.length > 1 ? '50vh' : '45vh' }}>
+          <div className="mb-4 pointer-events-auto relative w-full flex justify-center items-end px-4" style={{ height: gameMode === 'beat_rush' ? '35vh' : mode === 'audition' && leaderboard.length > 1 ? '50vh' : '45vh' }}>
             {mode === 'audition' && leaderboard.length > 1 ? (
               /* ── Multiplayer: All players side by side ── */
               <div className="flex items-end justify-center gap-2 w-full h-full">
@@ -621,7 +792,9 @@ export default function Game({ playlist: rawPlaylist, mode, gameMode = 'beat_up'
           {/* Game Mode UI — only render when actually playing (not during countdown) */}
           {gamePhase === 'playing' && (
             <div className="pointer-events-auto w-full flex justify-center px-6">
-              {renderGameMode()}
+              <GameModeBoundary onError={() => setRound(r => r + 1)}>
+                {renderGameMode()}
+              </GameModeBoundary>
             </div>
           )}
         </div>
